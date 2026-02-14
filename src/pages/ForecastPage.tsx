@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { LineChart as LucideLineChart } from 'lucide-react';
+import { formatMonthYear, formatShortMonthYear } from '../utils/dateUtils';
 import { ForecastService } from '../services/ForecastService';
 import type { ForecastPoint } from '../services/ForecastService';
 import {
@@ -22,7 +23,7 @@ export default function ForecastPage() {
     };
 
     const formatMoney = (amount: number) => {
-        return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(amount);
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(amount);
     };
 
     return (
@@ -45,8 +46,8 @@ export default function ForecastPage() {
                                 <XAxis
                                     dataKey="month"
                                     stroke="#9CA3AF"
-                                    fontSize={12}
-                                    tickFormatter={(val) => val.slice(5)} // Show MM
+                                    fontSize={10}
+                                    tickFormatter={(val) => formatShortMonthYear(val)}
                                     tickLine={false}
                                     axisLine={false}
                                 />
@@ -58,9 +59,9 @@ export default function ForecastPage() {
                                     axisLine={false}
                                 />
                                 <RechartsTooltip
-                                    contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#F3F4F6' }}
+                                    contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#F3F4F6', borderRadius: '8px' }}
                                     formatter={(value: any) => formatMoney(Number(value) || 0)}
-                                    labelFormatter={(label) => `Month: ${label}`}
+                                    labelFormatter={(label) => formatMonthYear(label)}
                                 />
                                 <Legend />
                                 <Line type="monotone" dataKey="projectedBalance" name="Projected Balance" stroke="#3B82F6" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />

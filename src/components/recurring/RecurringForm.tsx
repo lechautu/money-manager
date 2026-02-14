@@ -21,12 +21,16 @@ export function RecurringForm({ isOpen, onClose, initialData, onSuccess }: Recur
     const [accountId, setAccountId] = useState('');
     const [categoryId, setCategoryId] = useState('');
     const [subCategoryId, setSubCategoryId] = useState('');
-    const [dayOfMonth, setDayOfMonth] = useState(1);
-    const [startMonth, setStartMonth] = useState(new Date().toISOString().slice(0, 7));
-    const [endMonth, setEndMonth] = useState('');
+    const [frequency, setFrequency] = useState<RecurringRule['frequency']>('monthly');
+    const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
+    const [endDate, setEndDate] = useState('');
+    const [maxInstances, setMaxInstances] = useState('');
+    const [endCondition, setEndCondition] = useState<'none' | 'date' | 'count'>('none');
+    const [autoAdd, setAutoAdd] = useState(true);
     const [defaultStatus, setDefaultStatus] = useState<'pending' | 'posted'>('pending');
 
-    const [type, setType] = useState<'income' | 'expense'>('expense');
+    const [type, setType] = useState<'income' | 'expense' | 'transfer'>('expense');
+    const [toAccountId, setToAccountId] = useState('');
 
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
@@ -41,21 +45,36 @@ export function RecurringForm({ isOpen, onClose, initialData, onSuccess }: Recur
             if (initialData) {
                 setName(initialData.name);
                 setAmount(Math.abs(initialData.amount).toString());
-                setType(initialData.amount >= 0 ? 'income' : 'expense');
+                setType(initialData.type);
                 setAccountId(initialData.account_id);
-                setCategoryId(initialData.category_id);
+                setToAccountId(initialData.to_account_id || '');
+                setCategoryId(initialData.category_id || '');
                 setSubCategoryId(initialData.sub_category_id || '');
-                setDayOfMonth(initialData.day_of_month);
-                setStartMonth(initialData.start_month);
-                setEndMonth(initialData.end_month || '');
+                setFrequency(initialData.frequency);
+                setStartDate(initialData.start_date);
+                setEndDate(initialData.end_date || '');
+                setMaxInstances(initialData.max_instances?.toString() || '');
+
+                if (initialData.max_instances) setEndCondition('count');
+                else if (initialData.end_date) setEndCondition('date');
+                else setEndCondition('none');
+
+                setAutoAdd(initialData.auto_add !== 0);
                 setDefaultStatus(initialData.default_status);
             } else {
                 setName('');
                 setAmount('');
                 setType('expense');
-                setDayOfMonth(1);
-                setStartMonth(new Date().toISOString().slice(0, 7));
-                setEndMonth('');
+                setAccountId('');
+                setToAccountId('');
+                setCategoryId('');
+                setSubCategoryId('');
+                setFrequency('monthly');
+                setStartDate(new Date().toISOString().slice(0, 10));
+                setEndDate('');
+                setMaxInstances('');
+                setEndCondition('none');
+                setAutoAdd(true);
                 setDefaultStatus('pending');
             }
         }
@@ -85,6 +104,33 @@ export function RecurringForm({ isOpen, onClose, initialData, onSuccess }: Recur
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (type === 'transfer') {
+            if (!toAccountId) {
+                showToast('Please select "To Account"', 'error');
+                return;
+            }
+            if (accountId === toAccountId) {
+                showToast('Source and Destination accounts must be different', 'error');
+                return;
+            }
+        } else {
+            if (!categoryId) {
+                showToast('Please select a category', 'error');
+                return;
+            }
+        }
+
+        if (endCondition === 'date' && endDate && endDate < startDate) {
+            showToast('End date cannot be before start date', 'error');
+            return;
+        }
+
+        if (endCondition === 'count' && (!maxInstances || parseInt(maxInstances) <= 0)) {
+            showToast('Max instances must be greater than 0', 'error');
+            return;
+        }
+
         setLoading(true);
         try {
             const rawAmount = Math.abs(parseFloat(amount));
@@ -92,13 +138,17 @@ export function RecurringForm({ isOpen, onClose, initialData, onSuccess }: Recur
 
             const payload: any = {
                 name,
+                type,
+                frequency,
                 account_id: accountId,
+                to_account_id: type === 'transfer' ? toAccountId : null,
                 amount: finalAmount,
-                category_id: categoryId,
-                sub_category_id: subCategoryId || undefined,
-                day_of_month: dayOfMonth,
-                start_month: startMonth,
-                end_month: endMonth || undefined,
+                category_id: type === 'transfer' ? (categoryId || null) : categoryId,
+                sub_category_id: subCategoryId || null,
+                start_date: startDate,
+                end_date: endCondition === 'date' ? endDate : null,
+                max_instances: endCondition === 'count' ? (parseInt(maxInstances) || null) : null,
+                auto_add: autoAdd ? 1 : 0,
                 default_status: defaultStatus,
                 is_active: 1
             };
@@ -151,9 +201,16 @@ export function RecurringForm({ isOpen, onClose, initialData, onSuccess }: Recur
                         <button
                             type="button"
                             onClick={() => setType('income')}
-                            className={`flex-1 text-sm py-1 rounded ${type === 'income' ? 'bg-green-500/20 text-green-500' : 'text-gray-400'}`}
+                            className={`flex-1 text-sm py-1 rounded ${type === 'income' ? 'bg-emerald-500/20 text-emerald-500' : 'text-gray-400'}`}
                         >
                             Income
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setType('transfer')}
+                            className={`flex-1 text-sm py-1 rounded ${type === 'transfer' ? 'bg-blue-500/20 text-blue-500' : 'text-gray-400'}`}
+                        >
+                            Transfer
                         </button>
                     </div>
                 </div>
@@ -181,7 +238,7 @@ export function RecurringForm({ isOpen, onClose, initialData, onSuccess }: Recur
                         />
                     </div>
                     <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1">Account</label>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">{type === 'transfer' ? 'From Account' : 'Account'}</label>
                         <select
                             required
                             value={accountId}
@@ -195,16 +252,33 @@ export function RecurringForm({ isOpen, onClose, initialData, onSuccess }: Recur
                     </div>
                 </div>
 
+                {type === 'transfer' && (
+                    <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">To Account</label>
+                        <select
+                            required
+                            value={toAccountId}
+                            onChange={e => setToAccountId(e.target.value)}
+                            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-primary"
+                        >
+                            <option value="">Select Destination...</option>
+                            {accounts.map(acc => (
+                                <option key={acc.id} value={acc.id}>{acc.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-4">
                     <div>
                         <label className="block text-xs font-medium text-gray-400 mb-1">Category</label>
                         <select
-                            required
+                            required={type !== 'transfer'}
                             value={categoryId}
                             onChange={e => { setCategoryId(e.target.value); setSubCategoryId(''); }}
                             className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-primary"
                         >
-                            <option value="" disabled>Select...</option>
+                            <option value="">{type === 'transfer' ? 'None (Optional)' : 'Select...'}</option>
                             {categories.map(cat => (
                                 <option key={cat.id} value={cat.id}>{cat.name}</option>
                             ))}
@@ -226,39 +300,97 @@ export function RecurringForm({ isOpen, onClose, initialData, onSuccess }: Recur
                     </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1">Day of Month</label>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">Frequency</label>
+                        <select
+                            required
+                            value={frequency}
+                            onChange={e => setFrequency(e.target.value as any)}
+                            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-primary"
+                        >
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="biweekly">Bi-weekly</option>
+                            <option value="monthly">Monthly</option>
+                            <option value="quarterly">Quarterly</option>
+                            <option value="yearly">Yearly</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">Start Date</label>
                         <input
                             required
-                            type="number"
-                            min="1"
-                            max="28"
-                            value={dayOfMonth}
-                            onChange={e => setDayOfMonth(parseInt(e.target.value))}
+                            type="date"
+                            value={startDate}
+                            onChange={e => setStartDate(e.target.value)}
                             className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-primary"
                         />
                     </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1">Start Month</label>
-                        <input
-                            required
-                            type="month"
-                            value={startMonth}
-                            onChange={e => setStartMonth(e.target.value)}
+                        <label className="block text-xs font-medium text-gray-400 mb-1">End Condition</label>
+                        <select
+                            value={endCondition}
+                            onChange={e => setEndCondition(e.target.value as any)}
                             className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-primary"
-                        />
+                        >
+                            <option value="none">Never (No End)</option>
+                            <option value="date">Ends On Date</option>
+                            <option value="count">Ends After Count</option>
+                        </select>
                     </div>
-                    <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1">End Month</label>
-                        <input
-                            type="month"
-                            value={endMonth}
-                            onChange={e => setEndMonth(e.target.value)}
-                            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-primary"
-                            placeholder="Optional"
-                        />
+                    {endCondition === 'date' && (
+                        <div>
+                            <label className="block text-xs font-medium text-gray-400 mb-1">End Date</label>
+                            <input
+                                required
+                                type="date"
+                                value={endDate}
+                                onChange={e => setEndDate(e.target.value)}
+                                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-primary"
+                            />
+                        </div>
+                    )}
+                    {endCondition === 'count' && (
+                        <div>
+                            <label className="block text-xs font-medium text-gray-400 mb-1">Max Instances</label>
+                            <input
+                                required
+                                type="number"
+                                min="1"
+                                value={maxInstances}
+                                onChange={e => setMaxInstances(e.target.value)}
+                                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-primary"
+                                placeholder="e.g. 12"
+                            />
+                        </div>
+                    )}
+                </div>
+
+                <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Processing Mode</label>
+                    <div className="flex bg-gray-800 rounded p-1">
+                        <button
+                            type="button"
+                            onClick={() => setAutoAdd(true)}
+                            className={`flex-1 text-sm py-1 rounded ${autoAdd ? 'bg-primary/20 text-primary' : 'text-gray-400'}`}
+                        >
+                            Auto Add
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setAutoAdd(false)}
+                            className={`flex-1 text-sm py-1 rounded ${!autoAdd ? 'bg-orange-500/20 text-orange-500' : 'text-gray-400'}`}
+                        >
+                            Manual
+                        </button>
                     </div>
+                    <p className="text-[10px] text-gray-500 mt-1">
+                        {autoAdd ? 'Transactions are created automatically on due date.' : 'Transactions must be added manually. You will see a warning when due.'}
+                    </p>
                 </div>
 
                 <div>
@@ -274,7 +406,7 @@ export function RecurringForm({ isOpen, onClose, initialData, onSuccess }: Recur
                         <button
                             type="button"
                             onClick={() => setDefaultStatus('posted')}
-                            className={`flex-1 text-sm py-1 rounded ${defaultStatus === 'posted' ? 'bg-green-500/20 text-green-500' : 'text-gray-400'}`}
+                            className={`flex-1 text-sm py-1 rounded ${defaultStatus === 'posted' ? 'bg-emerald-500/20 text-emerald-500' : 'text-gray-400'}`}
                         >
                             Posted
                         </button>

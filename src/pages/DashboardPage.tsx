@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { StatisticsService } from '../services/StatisticsService';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
 import { ArrowUp, ArrowDown, Wallet } from 'lucide-react';
+import { formatDisplayDate } from '../utils/dateUtils';
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
+const COLORS = ['#0088FE', '#10B981', '#FFBB28', '#FF8042', '#8884d8', '#34D399'];
 
 export default function DashboardPage() {
     const [summary, setSummary] = useState<any>(null);
@@ -35,7 +36,7 @@ export default function DashboardPage() {
     };
 
     const formatMoney = (amount: number, currency: string = 'VND') => {
-        return new Intl.NumberFormat('vi-VN', { style: 'currency', currency }).format(amount);
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
     };
 
     if (loading) return <div className="p-8 text-center text-gray-500">Loading dashboard...</div>;
@@ -72,9 +73,9 @@ export default function DashboardPage() {
                 {/* Income */}
                 <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
                     <h2 className="text-sm text-gray-400 font-medium mb-1 flex items-center gap-2">
-                        <ArrowUp size={16} className="text-green-500" /> Income
+                        <ArrowUp size={16} className="text-emerald-500" /> Income
                     </h2>
-                    <div className="text-2xl font-bold text-green-500 mt-2">
+                    <div className="text-2xl font-bold text-emerald-500 mt-2">
                         {formatMoney(summary?.income, 'VND')}
                         <span className="text-xs text-gray-500 font-normal ml-2">(Est. Base)</span>
                     </div>
@@ -139,9 +140,9 @@ export default function DashboardPage() {
                             <div key={tx.id} className="flex justify-between items-center py-2 border-b border-gray-800 last:border-0 hover:bg-gray-800/30 px-2 rounded -mx-2">
                                 <div>
                                     <div className="font-medium text-white">{tx.category_name}</div>
-                                    <div className="text-xs text-gray-500">{new Date(tx.date).toLocaleDateString('vi-VN')} • {tx.note || 'No note'}</div>
+                                    <div className="text-xs text-gray-500">{formatDisplayDate(tx.date)} • {tx.note || 'No note'}</div>
                                 </div>
-                                <div className={`font-medium ${tx.amount < 0 ? 'text-white' : 'text-green-400'}`}>
+                                <div className={`font-medium ${tx.amount < 0 ? 'text-white' : 'text-emerald-400'}`}>
                                     {tx.amount < 0 ? '-' : '+'}{formatMoney(Math.abs(tx.amount), tx.currency)}
                                 </div>
                             </div>

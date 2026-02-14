@@ -1,19 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Lock, Unlock } from 'lucide-react';
+import { Lock, Unlock, Key, ShieldCheck, AlertCircle } from 'lucide-react';
 import { SettingsService } from '../../services/SettingsService';
 import type { AppSettings } from '../../services/SettingsService';
 import { useToast } from '../common/Toast';
 
 export function PasswordManager() {
     const [settings, setSettings] = useState<AppSettings | null>(null);
-    const [hasPassword, setHasPassword] = useState(false);
-    const [isChangeMode, setIsChangeMode] = useState(false);
-
-    // Form State
-    const [oldPassword, setOldPassword] = useState('');
-    const [newPassword, setNewPassword] = useState('');
+    const [isChanging, setIsChanging] = useState(false);
+    const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
-    const [showPassword, setShowPassword] = useState(false);
+    const [error, setError] = useState('');
     const { showToast } = useToast();
 
     useEffect(() => {
@@ -23,161 +19,189 @@ export function PasswordManager() {
     const loadSettings = async () => {
         const s = await SettingsService.getSettings();
         setSettings(s);
-        setHasPassword(!!(s.password_salt && s.password_verifier));
     };
 
     const handleToggleLock = async () => {
         if (!settings) return;
 
-        if (!settings.lock_enabled) {
-            // Enable lock
-            if (hasPassword) {
-                // Just enable
-                await SettingsService.setLockEnabled(true);
-                showToast('App lock enabled');
-                loadSettings();
-            } else {
-                // Must set password first
-                setIsChangeMode(true);
-            }
-        } else {
-            // Disable lock
-            await SettingsService.setLockEnabled(false);
-            showToast('App lock disabled');
-            loadSettings();
-        }
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        if (newPassword !== confirmPassword) {
-            showToast('Passwords do not match', 'error');
-            return;
-        }
-
-        if (newPassword.length < 4) {
-            showToast('Password must be at least 4 characters', 'error');
+        // If trying to enable but no password set, show password form
+        if (!settings.password_verifier && !settings.lock_enabled) {
+            setIsChanging(true);
             return;
         }
 
         try {
-            if (hasPassword) {
-                // Verify old password
-                const isValid = await SettingsService.verifyPassword(oldPassword);
-                if (!isValid) {
-                    showToast('Incorrect old password', 'error');
-                    return;
-                }
-            }
-
-            await SettingsService.setPassword(newPassword);
-            showToast('Password updated successfully');
-            setIsChangeMode(false);
-            setOldPassword('');
-            setNewPassword('');
-            setConfirmPassword('');
-            loadSettings(); // Reloads settings and hasPassword state
+            const nextState = !settings.lock_enabled;
+            await SettingsService.setLockEnabled(nextState);
+            await loadSettings();
+            showToast(`App lock ${nextState ? 'enabled' : 'disabled'}`);
         } catch (e) {
-            console.error(e);
+            showToast('Failed to update lock status', 'error');
+        }
+    };
+
+    const handleSetPassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+
+        if (password.length < 4) {
+            setError('Password must be at least 4 characters');
+            return;
+        }
+
+        if (password !== confirmPassword) {
+            setError('Passwords do not match');
+            return;
+        }
+
+        try {
+            await SettingsService.setPassword(password);
+            await loadSettings();
+            setIsChanging(false);
+            setPassword('');
+            setConfirmPassword('');
+            showToast('Password set successfully');
+        } catch (e) {
             showToast('Failed to set password', 'error');
         }
     };
 
-    if (!settings) return <div className="text-gray-500 text-sm">Loading settings...</div>;
+    const handleRemovePassword = async () => {
+        if (!window.confirm('Are you sure you want to remove the password? This will also disable the app lock.')) return;
+
+        try {
+            await SettingsService.removePassword();
+            await loadSettings();
+            showToast('Password removed successfully');
+        } catch (e) {
+            showToast('Failed to remove password', 'error');
+        }
+    };
+
+    if (!settings) return null;
 
     return (
-        <div className="bg-gray-900 p-6 rounded-lg border border-gray-800">
-            <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold flex items-center gap-2">
-                    {settings.lock_enabled ? <Lock size={20} className="text-primary" /> : <Unlock size={20} className="text-gray-500" />}
-                    App Lock
-                </h2>
-                <div className="flex items-center gap-2">
-                    <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={!!settings.lock_enabled}
-                            onChange={handleToggleLock}
-                            className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                    </label>
-                </div>
+        <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 shadow-xl overflow-hidden relative">
+            <div className="absolute -bottom-6 -right-6 opacity-10 pointer-events-none">
+                <ShieldCheck size={120} className="text-blue-500 -rotate-12" />
             </div>
 
-            <p className="text-sm text-gray-400 mb-4">
-                {settings.lock_enabled
-                    ? "App requires password on launch."
-                    : "Secure your data by enabling password protection."}
-            </p>
+            <div className="relative z-10">
+                <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-lg font-semibold flex items-center gap-2 text-white">
+                        <Lock size={20} className="text-blue-400" />
+                        Security (App Lock)
+                    </h2>
 
-            {!isChangeMode && (
-                <button
-                    onClick={() => setIsChangeMode(true)}
-                    className="text-sm text-primary hover:text-blue-400 underline"
-                >
-                    {hasPassword ? "Change Password" : "Set Password"}
-                </button>
-            )}
-
-            {isChangeMode && (
-                <form onSubmit={handleSubmit} className="mt-4 space-y-3 bg-gray-800/50 p-4 rounded border border-gray-700">
-                    <h3 className="text-sm font-medium mb-2">{hasPassword ? "Change Password" : "Set New Password"}</h3>
-
-                    {hasPassword && (
-                        <div>
-                            <input
-                                type={showPassword ? "text" : "password"}
-                                placeholder="Current Password"
-                                value={oldPassword}
-                                onChange={e => setOldPassword(e.target.value)}
-                                className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-sm text-white"
+                    {!isChanging && (
+                        <button
+                            onClick={handleToggleLock}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 ${settings.lock_enabled ? 'bg-blue-600' : 'bg-gray-700'
+                                }`}
+                        >
+                            <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${settings.lock_enabled ? 'translate-x-6' : 'translate-x-1'
+                                    }`}
                             />
-                        </div>
+                        </button>
                     )}
+                </div>
 
-                    <div>
-                        <input
-                            type={showPassword ? "text" : "password"}
-                            placeholder="New Password"
-                            value={newPassword}
-                            onChange={e => setNewPassword(e.target.value)}
-                            className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-sm text-white"
-                        />
-                    </div>
+                <p className="text-gray-400 text-sm mb-6 max-w-md">
+                    Protect your financial data with an app-level password. When enabled, you'll be prompted for your password every time you open the app.
+                </p>
 
-                    <div>
-                        <input
-                            type={showPassword ? "text" : "password"}
-                            placeholder="Confirm New Password"
-                            value={confirmPassword}
-                            onChange={e => setConfirmPassword(e.target.value)}
-                            className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-sm text-white"
-                        />
-                    </div>
+                {isChanging ? (
+                    <form onSubmit={handleSetPassword} className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 ml-1">New Password</label>
+                                <div className="relative">
+                                    <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                                    <input
+                                        type="password"
+                                        autoFocus
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className="w-full bg-gray-800 border border-gray-700 rounded-lg py-2 pl-10 pr-4 text-white focus:border-blue-500 outline-none transition-all"
+                                        placeholder="••••••"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 ml-1">Confirm Password</label>
+                                <div className="relative">
+                                    <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                                    <input
+                                        type="password"
+                                        value={confirmPassword}
+                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                        className="w-full bg-gray-800 border border-gray-700 rounded-lg py-2 pl-10 pr-4 text-white focus:border-blue-500 outline-none transition-all"
+                                        placeholder="••••••"
+                                    />
+                                </div>
+                            </div>
+                        </div>
 
-                    <div className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            id="show-pw"
-                            checked={showPassword}
-                            onChange={e => setShowPassword(e.target.checked)}
-                            className="rounded bg-gray-700 border-gray-600 text-primary focus:ring-primary"
-                        />
-                        <label htmlFor="show-pw" className="text-xs text-gray-400 select-none">Show Passwords</label>
-                    </div>
+                        {error && (
+                            <div className="flex items-center gap-2 text-red-400 text-xs bg-red-400/10 p-2 rounded-lg border border-red-400/20">
+                                <AlertCircle size={14} />
+                                {error}
+                            </div>
+                        )}
 
-                    <div className="flex gap-2 pt-2">
-                        <button type="submit" className="bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium">
-                            Save Password
-                        </button>
-                        <button type="button" onClick={() => { setIsChangeMode(false); }} className="text-gray-400 hover:text-white px-3 py-2 text-sm">
-                            Cancel
-                        </button>
+                        <div className="flex gap-2 justify-end">
+                            <button
+                                type="button"
+                                onClick={() => { setIsChanging(false); setError(''); }}
+                                className="px-4 py-2 text-gray-400 hover:text-white transition-colors text-sm"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold text-sm transition-all"
+                            >
+                                Set Password
+                            </button>
+                        </div>
+                    </form>
+                ) : (
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-gray-800/30 rounded-xl border border-gray-700/50">
+                        <div className="flex items-center gap-4">
+                            <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${settings.lock_enabled ? 'bg-blue-500/20 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.3)]' : 'bg-gray-700 text-gray-500'}`}>
+                                {settings.lock_enabled ? <Lock size={24} /> : <Unlock size={24} />}
+                            </div>
+                            <div>
+                                <div className="text-sm font-bold text-white capitalize">
+                                    Status: {settings.lock_enabled ? 'Enabled' : 'Disabled'}
+                                </div>
+                                <div className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">
+                                    {settings.password_verifier ? 'Password Protected' : 'No password set yet'}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-2 w-full sm:w-auto">
+                            <button
+                                onClick={() => setIsChanging(true)}
+                                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-gray-800/50 hover:bg-gray-700 border border-gray-700 text-white rounded-lg text-sm font-medium transition-all"
+                            >
+                                <Key size={16} className="text-gray-400" />
+                                {settings.password_verifier ? 'Change Password' : 'Set Password'}
+                            </button>
+                            {settings.password_verifier && (
+                                <button
+                                    onClick={handleRemovePassword}
+                                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-red-900/10 hover:bg-red-900/30 border border-red-900/20 text-red-400 rounded-lg text-sm font-medium transition-all"
+                                >
+                                    Remove
+                                </button>
+                            )}
+                        </div>
                     </div>
-                </form>
-            )}
+                )}
+            </div>
         </div>
     );
 }

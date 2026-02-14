@@ -1,5 +1,6 @@
 import { run } from '../db/client';
 import { v4 as uuidv4 } from 'uuid';
+import { AuditService } from './AuditService';
 
 export interface Transaction {
     id: string;
@@ -14,14 +15,29 @@ export interface Transaction {
     note?: string | null;
     source: 'manual' | 'recurring' | 'installment' | 'transfer';
     source_ref_id?: string | null;
+    is_split: number; // 0 or 1
+    splitLines?: TransactionSplit[];
     created_at: string;
     updated_at: string;
+    deleted_at?: string | null;
+}
+
+export interface TransactionSplit {
+    id: string;
+    transaction_id: string;
+    category_id: string;
+    sub_category_id?: string | null;
+    amount: number;
+    note?: string | null;
 }
 
 export type TransactionFilter = {
     month?: string;
+    startDate?: string;
+    endDate?: string;
     accountId?: string;
     categoryId?: string;
+    subCategoryId?: string;
     status?: string;
     search?: string;
     source?: string;
@@ -38,21 +54,33 @@ export const TransactionService = {
             'LEFT JOIN sub_categories sc ON t.sub_category_id = sc.id ' +
             'LEFT JOIN accounts a ON t.account_id = a.id ' +
             'LEFT JOIN accounts ta ON t.to_account_id = ta.id ' +
-            'WHERE 1=1';
+            'WHERE t.deleted_at IS NULL';
         const args: any[] = [];
 
         if (filter.month) {
             sql += ' AND t.month = ?';
             args.push(filter.month);
         }
+        if (filter.startDate) {
+            sql += ' AND t.date >= ?';
+            args.push(filter.startDate);
+        }
+        if (filter.endDate) {
+            sql += ' AND t.date <= ?';
+            args.push(filter.endDate);
+        }
         if (filter.accountId) {
-            // For transfers, we want to show the transaction if it is EITHER the source OR the destination
-            sql += ' AND (t.account_id = ? OR t.to_account_id = ?)';
-            args.push(filter.accountId, filter.accountId);
+            sql += ' AND t.account_id = ?';
+            args.push(filter.accountId);
         }
         if (filter.categoryId) {
-            sql += ' AND t.category_id = ?';
-            args.push(filter.categoryId);
+            // For split transactions, check both main category and split categories
+            sql += ` AND (t.category_id = ? OR (t.is_split = 1 AND t.id IN (SELECT transaction_id FROM transaction_splits WHERE category_id = ?)))`;
+            args.push(filter.categoryId, filter.categoryId);
+        }
+        if (filter.subCategoryId) {
+            sql += ` AND (t.sub_category_id = ? OR (t.is_split = 1 AND t.id IN (SELECT transaction_id FROM transaction_splits WHERE sub_category_id = ?)))`;
+            args.push(filter.subCategoryId, filter.subCategoryId);
         }
         if (filter.status) {
             sql += ' AND t.status = ?';
@@ -84,7 +112,25 @@ export const TransactionService = {
         const finalOrd = validOrds.includes(sortOrd) ? sortOrd : 'desc';
 
         sql += ` ORDER BY ${finalCol} ${finalOrd}, t.created_at DESC`;
-        return await run(sql, args);
+
+        const txs: Transaction[] = await run(sql, args);
+        if (txs.length === 0) return [];
+
+        const splitTxIds = txs.filter(t => t.is_split).map(t => t.id);
+        if (splitTxIds.length > 0) {
+            const splits = await run(`SELECT * FROM transaction_splits WHERE transaction_id IN (${splitTxIds.map(() => '?').join(',')})`, splitTxIds);
+            const splitsMap: Record<string, TransactionSplit[]> = {};
+            splits.forEach((s: TransactionSplit) => {
+                if (!splitsMap[s.transaction_id]) splitsMap[s.transaction_id] = [];
+                splitsMap[s.transaction_id].push(s);
+            });
+            txs.forEach(t => {
+                if (t.is_split && splitsMap[t.id]) {
+                    t.splitLines = splitsMap[t.id];
+                }
+            });
+        }
+        return txs;
     },
 
     async getById(id: string): Promise<Transaction | null> {
@@ -99,15 +145,27 @@ export const TransactionService = {
 
         await run(
             `INSERT INTO transactions 
-            (id, account_id, date, month, amount, category_id, sub_category_id, status, note, source, source_ref_id, created_at, updated_at, to_account_id) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (id, account_id, date, month, amount, category_id, sub_category_id, status, note, source, source_ref_id, is_split, created_at, updated_at, to_account_id) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 newTx.id, newTx.account_id, newTx.date, newTx.month, newTx.amount,
-                newTx.category_id, newTx.sub_category_id, newTx.status, newTx.note,
-                newTx.source, newTx.source_ref_id, newTx.created_at, newTx.updated_at,
+                newTx.category_id || null, newTx.sub_category_id || null, newTx.status, newTx.note,
+                newTx.source, newTx.source_ref_id, newTx.is_split || 0, newTx.created_at, newTx.updated_at,
                 newTx.to_account_id || null
             ]
         );
+
+        if (newTx.is_split && newTx.splitLines && newTx.splitLines.length > 0) {
+            for (const split of newTx.splitLines) {
+                const splitId = uuidv4();
+                await run(
+                    `INSERT INTO transaction_splits (id, transaction_id, category_id, sub_category_id, amount, note) VALUES (?, ?, ?, ?, ?, ?)`,
+                    [splitId, newTx.id, split.category_id, split.sub_category_id || null, split.amount, split.note || null]
+                );
+            }
+        }
+
+        await AuditService.log('transaction_create', 'transaction', newTx.id, { amount: newTx.amount, note: newTx.note });
         return newTx;
     },
 
@@ -118,18 +176,37 @@ export const TransactionService = {
 
         const keys = Object.keys(tx) as (keyof typeof tx)[];
         for (const key of keys) {
-            if ((key as string) === 'created_at' || (key as string) === 'updated_at' || (key as string) === 'id') continue;
+            if (key === 'splitLines') continue;
             fields.push(`${key} = ?`);
             args.push(tx[key]);
         }
 
-        if (fields.length === 0) return;
+        if (fields.length > 0) {
+            fields.push('updated_at = ?');
+            args.push(now);
+            args.push(id);
+            await run(`UPDATE transactions SET ${fields.join(', ')} WHERE id = ?`, args);
+        }
 
-        fields.push('updated_at = ?');
-        args.push(now);
-        args.push(id);
+        // Handle Splits Update
+        if (tx.is_split !== undefined || (tx.splitLines && tx.splitLines.length > 0)) {
+            if (tx.splitLines) {
+                await run('DELETE FROM transaction_splits WHERE transaction_id = ?', [id]);
+                if (tx.is_split) {
+                    for (const split of tx.splitLines) {
+                        const splitId = uuidv4();
+                        await run(
+                            `INSERT INTO transaction_splits (id, transaction_id, category_id, sub_category_id, amount, note) VALUES (?, ?, ?, ?, ?, ?)`,
+                            [splitId, id, split.category_id, split.sub_category_id || null, split.amount, split.note || null]
+                        );
+                    }
+                }
+            } else if (tx.is_split === 0) {
+                await run('DELETE FROM transaction_splits WHERE transaction_id = ?', [id]);
+            }
+        }
 
-        await run(`UPDATE transactions SET ${fields.join(', ')} WHERE id = ?`, args);
+        await AuditService.log('transaction_update', 'transaction', id, tx);
     },
 
     async transfer(fromAccountId: string, toAccountId: string, amount: number, date: string, categoryId: string, subCategoryId: string | undefined, note?: string): Promise<Transaction> {
@@ -150,53 +227,64 @@ export const TransactionService = {
             note: note || 'Transfer',
             source: 'transfer',
             source_ref_id: null,
+            is_split: 0,
             created_at: now,
             updated_at: now
         };
 
-        // Create Single Transfer Transaction (Expense side, linking to destination)
         await run(
             `INSERT INTO transactions 
-            (id, account_id, to_account_id, date, month, amount, category_id, sub_category_id, status, note, source, source_ref_id, created_at, updated_at) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (id, account_id, to_account_id, date, month, amount, category_id, sub_category_id, status, note, source, source_ref_id, is_split, created_at, updated_at) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 newTx.id, newTx.account_id, newTx.to_account_id, newTx.date, newTx.month, newTx.amount,
                 newTx.category_id, newTx.sub_category_id, newTx.status, newTx.note,
-                newTx.source, newTx.source_ref_id, newTx.created_at, newTx.updated_at
+                newTx.source, newTx.source_ref_id, 0, newTx.created_at, newTx.updated_at
             ]
         );
+
+        await AuditService.log('transaction_create', 'transaction', newTx.id, { type: 'transfer', amount: amount, from: fromAccountId, to: toAccountId });
         return newTx;
     },
 
     async delete(id: string): Promise<void> {
+        const now = new Date().toISOString();
+        const tx = await this.getById(id);
+        if (!tx) return;
+
         await run('BEGIN TRANSACTION');
         try {
-            // 1. Unlink from installment payments
-            // Check if there is a linked payment
-            const linkedPayments = await run('SELECT * FROM installment_payments WHERE linked_transaction_id = ?', [id]);
-            if (linkedPayments.length > 0) {
-                // Reset payment status
-                // We could calculate if it is overdue or upcoming, but for simplicity let's set to 'upcoming'
-                // and let the checkOverdue logic handle it on next load, or we check date now.
-                for (const p of linkedPayments) {
-                    const today = new Date().toISOString().slice(0, 10);
-                    let newStatus = 'upcoming';
-                    if (p.due_date < today) newStatus = 'overdue';
-                    else if (p.due_date === today) newStatus = 'due';
+            // 1. Unlink from installment payments (if any)
+            await run('UPDATE installment_payments SET status = ?, paid_at = NULL, linked_transaction_id = NULL WHERE linked_transaction_id = ?', ['upcoming', id]);
 
-                    await run(
-                        'UPDATE installment_payments SET status = ?, paid_at = NULL, linked_transaction_id = NULL WHERE id = ?',
-                        [newStatus, p.id]
-                    );
-                }
-            }
+            // 2. Unlink from recurring instances (if generated from one) but keep record
+            // No action needed for recurring_instances as we want to preserve history/link
 
-            // 2. Remove recurrence instance record if exists
-            await run('DELETE FROM recurring_instances WHERE generated_transaction_id = ?', [id]);
+            // 3. Soft Delete transaction
+            await run('UPDATE transactions SET deleted_at = ? WHERE id = ?', [now, id]);
 
-            // 3. Delete the transaction
-            await run('DELETE FROM transactions WHERE id = ?', [id]);
+            await AuditService.log('transaction_delete', 'transaction', id, { amount: tx.amount, note: tx.note });
+            await run('COMMIT');
+        } catch (error) {
+            await run('ROLLBACK');
+            throw error;
+        }
+    },
 
+    async restore(id: string): Promise<void> {
+        await run('BEGIN TRANSACTION');
+        try {
+            // 1. Restore Transaction
+            await run('UPDATE transactions SET deleted_at = NULL WHERE id = ?', [id]);
+
+            // 2. Relink Installment (Best Effort)
+            await run(`
+                UPDATE installment_payments 
+                SET status = 'paid', paid_at = (SELECT date FROM transactions WHERE id = ?), linked_transaction_id = ?
+                WHERE generated_transaction_id = ?
+            `, [id, id, id]);
+
+            await AuditService.log('transaction_restore', 'transaction', id);
             await run('COMMIT');
         } catch (error) {
             await run('ROLLBACK');
@@ -206,43 +294,109 @@ export const TransactionService = {
 
     async getBalances(): Promise<Record<string, { posted: number, effective: number }>> {
         // 1. Standard balances (Account Owner, includes Transfer Out)
-        const sqlMain = `
+        const rowsMain = await run(`
             SELECT 
                 t.account_id,
                 SUM(CASE WHEN t.status = 'posted' THEN t.amount ELSE 0 END) as posted,
                 SUM(CASE WHEN t.status IN ('posted', 'pending') THEN t.amount ELSE 0 END) as effective
             FROM transactions t
+            WHERE t.deleted_at IS NULL
             GROUP BY t.account_id
-        `;
-        const rowsMain = await run(sqlMain);
+        `);
 
         // 2. Incoming Transfers (Account Destination)
-        const sqlIncoming = `
+        const rowsIncoming = await run(`
             SELECT 
                 t.to_account_id as account_id,
                 SUM(CASE WHEN t.status = 'posted' THEN ABS(t.amount) ELSE 0 END) as posted,
                 SUM(CASE WHEN t.status IN ('posted', 'pending') THEN ABS(t.amount) ELSE 0 END) as effective
             FROM transactions t
-            WHERE t.to_account_id IS NOT NULL
+            WHERE t.to_account_id IS NOT NULL AND t.deleted_at IS NULL
             GROUP BY t.to_account_id
-        `;
-        const rowsIncoming = await run(sqlIncoming);
+        `);
 
         const result: Record<string, { posted: number, effective: number }> = {};
 
-        // Merge results
-        for (const row of rowsMain) {
-            result[row.account_id] = { posted: row.posted, effective: row.effective };
-        }
+        const processRow = (row: any, isIncome: boolean) => {
+            if (!row.posted) row.posted = 0;
+            if (!row.effective) row.effective = 0;
+            if (!result[row.account_id]) result[row.account_id] = { posted: 0, effective: 0 };
+            result[row.account_id].posted += isIncome ? row.posted : row.posted;
+            result[row.account_id].effective += isIncome ? row.effective : row.effective;
+        };
 
-        for (const row of rowsIncoming) {
-            if (!result[row.account_id]) {
-                result[row.account_id] = { posted: 0, effective: 0 };
-            }
-            result[row.account_id].posted += row.posted;
-            result[row.account_id].effective += row.effective;
-        }
+        rowsMain.forEach((r: any) => processRow(r, false));
+        rowsIncoming.forEach((r: any) => processRow(r, true));
+
+        // 3. Add Initial Balances
+        const accounts = await run('SELECT id, initial_balance FROM accounts');
+        accounts.forEach((acc: any) => {
+            if (!result[acc.id]) result[acc.id] = { posted: 0, effective: 0 };
+            result[acc.id].posted += acc.initial_balance;
+            result[acc.id].effective += acc.initial_balance;
+        });
 
         return result;
+    },
+
+    async bulkDelete(ids: string[]): Promise<void> {
+        if (ids.length === 0) return;
+        const now = new Date().toISOString();
+        const placeholders = ids.map(() => '?').join(',');
+
+        await run('BEGIN TRANSACTION');
+        try {
+            // Unlink installments
+            await run(`UPDATE installment_payments SET status = 'upcoming', paid_at = NULL, linked_transaction_id = NULL WHERE linked_transaction_id IN (${placeholders})`, ids);
+
+            // Soft Delete
+            await run(`UPDATE transactions SET deleted_at = ? WHERE id IN (${placeholders})`, [now, ...ids]);
+
+            await AuditService.log('transaction_bulk_delete', 'transaction', undefined, { count: ids.length, ids });
+            await run('COMMIT');
+        } catch (e) {
+            await run('ROLLBACK');
+            throw e;
+        }
+    },
+
+    async bulkRestore(ids: string[]): Promise<void> {
+        if (ids.length === 0) return;
+        const placeholders = ids.map(() => '?').join(',');
+
+        await run('BEGIN TRANSACTION');
+        try {
+            await run(`UPDATE transactions SET deleted_at = NULL WHERE id IN (${placeholders})`, ids);
+            await AuditService.log('transaction_bulk_restore', 'transaction', undefined, { count: ids.length, ids });
+            await run('COMMIT');
+        } catch (e) {
+            await run('ROLLBACK');
+            throw e;
+        }
+    },
+
+    async bulkUpdate(ids: string[], updates: Partial<Pick<Transaction, 'account_id' | 'status'>>): Promise<void> {
+        const fields: string[] = [];
+        const args: any[] = [];
+        const now = new Date().toISOString();
+
+        if (updates.account_id) {
+            fields.push('account_id = ?');
+            args.push(updates.account_id);
+        }
+        if (updates.status) {
+            fields.push('status = ?');
+            args.push(updates.status);
+        }
+
+        if (fields.length === 0) return;
+
+        fields.push('updated_at = ?');
+        args.push(now);
+
+        const placeholders = ids.map(() => '?').join(',');
+        args.push(...ids);
+
+        await run(`UPDATE transactions SET ${fields.join(', ')} WHERE id IN (${placeholders})`, args);
     }
 };

@@ -5,6 +5,7 @@ export interface AppSettings {
     lock_enabled: number;
     password_salt?: string;
     password_verifier?: string;
+    date_format: string;
     updated_at: string;
 }
 
@@ -17,35 +18,29 @@ export const SettingsService = {
             // Create default settings if not exists
             const now = new Date().toISOString();
             await run(
-                'INSERT INTO settings (id, lock_enabled, updated_at) VALUES (?, 0, ?)',
+                'INSERT INTO settings (id, lock_enabled, date_format, updated_at) VALUES (?, 0, \'dd/MM/yyyy\', ?)',
                 [SETTINGS_ID, now]
             );
-            // Wait, schema definitely has updated_at. Let's check schema again.
-            // 123: CREATE TABLE IF NOT EXISTS settings (
-            // 124:     id TEXT PRIMARY KEY,
-            // 125:     lock_enabled INTEGER NOT NULL DEFAULT 0,
-            // 126:     password_salt TEXT,
-            // 127:     password_verifier TEXT,
-            // 128:     updated_at TEXT NOT NULL
-            // 129: );
-            // So only updated_at.
-
-            // Re-run get to be sure
             return await this.getSettings();
         }
         return rows[0];
     },
 
     async initSettings() {
-        // idempotent init
         const rows = await run('SELECT * FROM settings WHERE id = ?', [SETTINGS_ID]);
         if (rows.length === 0) {
             const now = new Date().toISOString();
             await run(
-                'INSERT INTO settings (id, lock_enabled, updated_at) VALUES (?, 0, ?)',
+                'INSERT INTO settings (id, lock_enabled, date_format, updated_at) VALUES (?, 0, \'dd/MM/yyyy\', ?)',
                 [SETTINGS_ID, now]
             );
         }
+    },
+
+    async setDateFormat(format: string): Promise<void> {
+        await this.initSettings();
+        const now = new Date().toISOString();
+        await run('UPDATE settings SET date_format = ?, updated_at = ? WHERE id = ?', [format, now, SETTINGS_ID]);
     },
 
     async setLockEnabled(enabled: boolean): Promise<void> {
@@ -87,5 +82,14 @@ export const SettingsService = {
     async hasPassword(): Promise<boolean> {
         const settings = await this.getSettings();
         return !!(settings.password_salt && settings.password_verifier);
+    },
+
+    async removePassword(): Promise<void> {
+        await this.initSettings();
+        const now = new Date().toISOString();
+        await run(
+            'UPDATE settings SET password_salt = NULL, password_verifier = NULL, lock_enabled = 0, updated_at = ? WHERE id = ?',
+            [now, SETTINGS_ID]
+        );
     }
 };

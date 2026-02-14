@@ -5,6 +5,7 @@ import { Modal } from '../ui/Modal';
 import { Search } from 'lucide-react';
 import { AccountService } from '../../services/AccountService';
 import { CategoryService } from '../../services/CategoryService';
+import { formatDisplayDate } from '../../utils/dateUtils';
 
 interface TransactionSelectorProps {
     isOpen: boolean;
@@ -73,11 +74,11 @@ export function TransactionSelector({ isOpen, onClose, onSelect, currentTransact
     };
 
     const formatMoney = (amount: number) => {
-        return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'VND' }).format(amount);
     };
 
     const formatDate = (dateStr: string) => {
-        return new Date(dateStr).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+        return formatDisplayDate(dateStr);
     };
 
     return (
@@ -107,7 +108,7 @@ export function TransactionSelector({ isOpen, onClose, onSelect, currentTransact
                                     {formatDate(tx.date)} • {catMap[tx.category_id]} • {accMap[tx.account_id]}
                                 </div>
                             </div>
-                            <div className={`text-sm font-medium ${tx.amount < 0 ? 'text-white' : 'text-green-500'}`}>
+                            <div className={`text-sm font-medium ${tx.amount < 0 ? 'text-white' : 'text-emerald-500'}`}>
                                 {formatMoney(tx.amount)}
                             </div>
                         </div>

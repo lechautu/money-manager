@@ -29,6 +29,10 @@ export const CategoryService = {
         return await run('SELECT * FROM sub_categories WHERE category_id = ? ORDER BY sort_order, name', [categoryId]);
     },
 
+    async getAllSubCategories(): Promise<SubCategory[]> {
+        return await run('SELECT * FROM sub_categories ORDER BY sort_order, name');
+    },
+
     async createCategory(name: string): Promise<Category> {
         const id = uuidv4();
         const now = new Date().toISOString();
@@ -61,6 +65,24 @@ export const CategoryService = {
     async updateSubCategory(id: string, name: string): Promise<void> {
         const now = new Date().toISOString();
         await run('UPDATE sub_categories SET name = ?, updated_at = ? WHERE id = ?', [name, now, id]);
+    },
+
+    async moveSubCategory(subCategoryId: string, newCategoryId: string): Promise<void> {
+        const now = new Date().toISOString();
+        // 1. Update sub_categories
+        await run('UPDATE sub_categories SET category_id = ?, updated_at = ? WHERE id = ?', [newCategoryId, now, subCategoryId]);
+
+        // 2. Update transactions
+        await run('UPDATE transactions SET category_id = ?, updated_at = ? WHERE sub_category_id = ?', [newCategoryId, now, subCategoryId]);
+
+        // 3. Update transaction_splits
+        await run('UPDATE transaction_splits SET category_id = ? WHERE sub_category_id = ?', [newCategoryId, subCategoryId]);
+
+        // 4. Update recurring_rules
+        await run('UPDATE recurring_rules SET category_id = ?, updated_at = ? WHERE sub_category_id = ?', [newCategoryId, now, subCategoryId]);
+
+        // 5. Update installment_plans
+        await run('UPDATE installment_plans SET payment_category_id = ?, updated_at = ? WHERE payment_sub_category_id = ?', [newCategoryId, now, subCategoryId]);
     },
 
     async deleteCategory(id: string): Promise<void> {

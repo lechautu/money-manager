@@ -4,17 +4,25 @@ import { AccountService } from '../../services/AccountService';
 import type { Account } from '../../services/AccountService';
 import { TransactionService } from '../../services/TransactionService';
 import { AccountForm } from './AccountForm';
-import { Plus, Edit, Wallet, CreditCard, Banknote } from 'lucide-react';
+import { Plus, Edit, Wallet, CreditCard, Banknote, MoreVertical, Trash } from 'lucide-react';
 
 export function AccountList() {
     const navigate = useNavigate();
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [balances, setBalances] = useState<Record<string, { posted: number, effective: number }>>({});
     const [isFormOpen, setIsFormOpen] = useState(false);
+    const [openMenuId, setOpenMenuId] = useState<string | null>(null);
     const [editingAccount, setEditingAccount] = useState<Account | null>(null);
 
     useEffect(() => {
         loadData();
+    }, []);
+
+    // Close menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = () => setOpenMenuId(null);
+        document.addEventListener('click', handleClickOutside);
+        return () => document.removeEventListener('click', handleClickOutside);
     }, []);
 
     const loadData = async () => {
@@ -29,6 +37,21 @@ export function AccountList() {
     const handleEdit = (acc: Account) => {
         setEditingAccount(acc);
         setIsFormOpen(true);
+        setOpenMenuId(null);
+    };
+
+    const handleDelete = async (acc: Account) => {
+        if (!window.confirm(`Are you sure you want to delete account "${acc.name}"? This action cannot be undone.`)) return;
+
+        try {
+            await AccountService.delete(acc.id);
+            // showToast('Account deleted successfully'); // Assuming useToast is available or add it
+            loadData();
+        } catch (e: any) {
+            console.error(e);
+            alert(e.message || 'Failed to delete account');
+        }
+        setOpenMenuId(null);
     };
 
     const handleClose = () => {
@@ -37,14 +60,14 @@ export function AccountList() {
     };
 
     const formatMoney = (amount: number, currency: string) => {
-        return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: currency }).format(amount);
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency }).format(amount);
     };
 
     const getIcon = (type: string) => {
         switch (type) {
             case 'bank': return <Banknote className="text-blue-400" size={24} />;
             case 'credit': return <CreditCard className="text-purple-400" size={24} />;
-            default: return <Wallet className="text-green-400" size={24} />;
+            default: return <Wallet className="text-emerald-400" size={24} />;
         }
     };
 
@@ -63,11 +86,12 @@ export function AccountList() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {accounts.map(acc => {
                     const balance = balances[acc.id] || { posted: 0, effective: 0 };
+                    const hasPending = balance.effective !== balance.posted;
                     return (
                         <div
                             key={acc.id}
                             onClick={() => navigate(`/transactions?accountId=${acc.id}`)}
-                            className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col gap-3 hover:border-gray-700 transition-colors group cursor-pointer relative"
+                            className={`bg-gray-900 border ${hasPending ? 'border-yellow-500/50 shadow-lg shadow-yellow-500/5' : 'border-gray-800'} rounded-xl p-4 flex flex-col gap-3 hover:border-gray-700 transition-all group cursor-pointer relative`}
                         >
                             <div className="flex justify-between items-start">
                                 <div className="flex items-center gap-3">
@@ -79,12 +103,42 @@ export function AccountList() {
                                         <span className="text-xs text-uppercase text-gray-500 font-medium tracking-wider">{acc.currency} • {acc.type}</span>
                                     </div>
                                 </div>
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); handleEdit(acc); }}
-                                    className="p-1 text-gray-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                                >
-                                    <Edit size={16} />
-                                </button>
+
+                                <div className="relative">
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenMenuId(openMenuId === acc.id ? null : acc.id);
+                                        }}
+                                        className="p-1 text-gray-400 hover:text-white rounded hover:bg-gray-800 transition-colors"
+                                    >
+                                        <MoreVertical size={16} />
+                                    </button>
+
+                                    <div
+                                        className={`absolute right-0 top-8 w-32 bg-gray-900 border border-gray-700 rounded-lg shadow-2xl z-[100] overflow-hidden transition-all duration-200 ease-out origin-top-right ${openMenuId === acc.id ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'}`}
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleEdit(acc);
+                                            }}
+                                            className="w-full text-left px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white flex items-center gap-2 transition-colors"
+                                        >
+                                            <Edit size={14} /> Edit
+                                        </button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDelete(acc);
+                                            }}
+                                            className="w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-red-500/10 hover:text-red-400 flex items-center gap-2 border-t border-gray-700 transition-colors"
+                                        >
+                                            <Trash size={14} /> Delete
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
 
                             <div className="space-y-1">

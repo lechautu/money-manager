@@ -41,8 +41,11 @@ export const ForecastService = {
             // Process Rules
             for (const rule of activeRules) {
                 // Check validity
-                if (monthStr < rule.start_month) continue;
-                if (rule.end_month && monthStr > rule.end_month) continue;
+                const ruleStartMonth = rule.start_date.slice(0, 7);
+                const ruleEndMonth = rule.end_date ? rule.end_date.slice(0, 7) : null;
+
+                if (monthStr < ruleStartMonth) continue;
+                if (ruleEndMonth && monthStr > ruleEndMonth) continue;
 
                 if (rule.amount >= 0) {
                     monthlyIncome += rule.amount;

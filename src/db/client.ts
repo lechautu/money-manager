@@ -6,18 +6,22 @@ import { IDBBatchAtomicVFS } from 'wa-sqlite/src/examples/IDBBatchAtomicVFS.js';
 const DB_NAME = 'money-mgmt.sqlite';
 
 let sqlite: SQLiteAPI;
-let db: number;
+let db: number | null = null;
+let vfs: any;
 
 export async function getDB() {
     if (db) return { sqlite, db };
 
-    const module = await SQLiteESMFactory();
-    sqlite = SQLite.Factory(module);
+    if (!sqlite) {
+        const module = await SQLiteESMFactory();
+        sqlite = SQLite.Factory(module);
+    }
 
-    const vfs = new IDBBatchAtomicVFS(DB_NAME);
-    await (vfs as any).isReady;
-
-    sqlite.vfs_register(vfs as any, true);
+    if (!vfs) {
+        vfs = new IDBBatchAtomicVFS(DB_NAME);
+        await (vfs as any).isReady;
+        sqlite.vfs_register(vfs as any, true);
+    }
 
     db = await sqlite.open_v2(
         DB_NAME,
@@ -26,8 +30,6 @@ export async function getDB() {
     );
 
     // Initialize PRAGMAs
-    // IDBBatchAtomicVFS handles atomicity via IDB transactions. WAL might be problematic or unnecessary.
-    // await sqlite.exec(db, 'PRAGMA journal_mode=WAL;');
     await sqlite.exec(db, 'PRAGMA foreign_keys=ON;');
 
     return { sqlite, db };
@@ -66,7 +68,7 @@ export async function run(sql: string, args: any[] = []) {
         const { sqlite, db } = await getDB();
         const results: any[] = [];
 
-        for await (const stmt of sqlite.statements(db, sql)) {
+        for await (const stmt of sqlite.statements(db!, sql)) {
             if (args.length > 0) {
                 // Use built-in bind_collection for safer binding
                 // @ts-ignore
@@ -133,11 +135,44 @@ export async function run(sql: string, args: any[] = []) {
 export async function exec(sql: string) {
     return dbMutex.dispatch(async () => {
         const { sqlite, db } = await getDB();
-        await sqlite.exec(db, sql);
+        await sqlite.exec(db!, sql);
     });
+}
+
+export async function closeDB() {
+    return dbMutex.dispatch(async () => {
+        if (db && sqlite) {
+            await sqlite.close(db);
+            db = null;
+        }
+    });
+}
+
+export async function deleteFile(filename: string) {
+    // Operations that change file existence should be guarded or run when DB is closed
+    // But VFS operations are generally independent of the DB connection if the connection is closed.
+    // We assume the caller knows what they are doing (e.g. closing DB first).
+    if (vfs) {
+        // IDBBatchAtomicVFS xDelete implementation
+        // xDelete(name, syncDir)
+        try {
+            await vfs.xDelete(filename, 1);
+        } catch (e) {
+            console.warn('Delete file failed or file does not exist:', e);
+        }
+    }
+}
+
+export async function createBackup(_backupName: string) {
+    // Deprecated for now due to crash. 
+    // Logic moved to ImportExportService (JSON based snapshot)
+}
+
+export async function restoreFromBackup(_backupName: string) {
+    // Deprecated for now due to crash.
+    // Logic moved to ImportExportService (JSON based snapshot)
 }
 
 export function getSqliteInstance() {
     return { sqlite, db };
 }
-

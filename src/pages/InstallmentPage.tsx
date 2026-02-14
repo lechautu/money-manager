@@ -6,6 +6,7 @@ import { TransactionForm } from '../components/transactions/TransactionForm';
 import { Plus, Trash, Calendar, CreditCard, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
 import { AccountService } from '../services/AccountService';
 import { useToast } from '../components/common/Toast';
+import { formatDisplayDate } from '../utils/dateUtils';
 
 export default function InstallmentPage() {
     const [plans, setPlans] = useState<InstallmentPlan[]>([]);
@@ -64,7 +65,7 @@ export default function InstallmentPage() {
     };
 
     const formatMoney = (amount: number) => {
-        return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'VND' }).format(amount);
     };
 
     return (
@@ -117,7 +118,7 @@ export default function InstallmentPage() {
                                         <CreditCard size={14} /> {accNames[plan.credit_account_id]}
                                     </div>
                                     <div className="flex items-center gap-1">
-                                        <Calendar size={14} /> Start: {plan.start_date}
+                                        <Calendar size={14} /> Start: {formatDisplayDate(plan.start_date)}
                                     </div>
                                 </div>
                             </div>
@@ -138,11 +139,11 @@ export default function InstallmentPage() {
                                         <div key={pay.id} className="flex justify-between items-center text-sm border-b border-gray-800 pb-2 last:border-0 last:pb-0">
                                             <div className="flex items-center gap-3">
                                                 <span className="text-gray-500 text-xs w-6">#{idx + 1}</span>
-                                                <span className="text-white">{pay.due_date}</span>
+                                                <span className="text-white">{formatDisplayDate(pay.due_date)}</span>
                                             </div>
                                             <div className="flex items-center gap-4">
                                                 <span className="font-medium text-white">{formatMoney(pay.amount)}</span>
-                                                <span className={`text-xs px-2 py-0.5 rounded ${pay.status === 'paid' ? 'bg-green-500/20 text-green-500' :
+                                                <span className={`text-xs px-2 py-0.5 rounded ${pay.status === 'paid' ? 'bg-emerald-500/20 text-emerald-500' :
                                                     pay.status === 'overdue' ? 'bg-red-500/20 text-red-500' :
                                                         'bg-gray-700 text-gray-400'
                                                     }`}>

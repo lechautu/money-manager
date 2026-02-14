@@ -42,7 +42,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                         key={toast.id}
                         className={`
                             pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-lg shadow-2xl border min-w-[300px] animate-in slide-in-from-right fade-in duration-300
-                            ${toast.type === 'success' ? 'bg-gray-900 border-green-500/50 text-green-400' :
+                            ${toast.type === 'success' ? 'bg-gray-900 border-emerald-500/50 text-emerald-400' :
                                 toast.type === 'error' ? 'bg-gray-900 border-red-500/50 text-red-400' :
                                     'bg-gray-900 border-blue-500/50 text-blue-400'}
                         `}

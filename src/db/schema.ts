@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     name TEXT NOT NULL,
     type TEXT NOT NULL CHECK(type IN ('bank','credit','debit')),
     currency TEXT NOT NULL,
+    initial_balance REAL NOT NULL DEFAULT 0,
     note TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -41,15 +42,17 @@ CREATE TABLE IF NOT EXISTS transactions (
     date TEXT NOT NULL,
     month TEXT NOT NULL,
     amount REAL NOT NULL,
-    category_id TEXT NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
+    category_id TEXT REFERENCES categories(id) ON DELETE RESTRICT,
     sub_category_id TEXT REFERENCES sub_categories(id) ON DELETE RESTRICT,
     to_account_id TEXT REFERENCES accounts(id) ON DELETE RESTRICT,
     status TEXT NOT NULL CHECK(status IN ('posted','pending','ignored')),
     note TEXT,
-    source TEXT CHECK(source IN ('manual','recurring','installment','transfer')),
+    source CHECK(source IN ('manual','recurring','installment','transfer')),
     source_ref_id TEXT,
+    is_split INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_tx_month ON transactions(month);
@@ -57,6 +60,17 @@ CREATE INDEX IF NOT EXISTS idx_tx_account_month ON transactions(account_id, mont
 CREATE INDEX IF NOT EXISTS idx_tx_category_month ON transactions(category_id, month);
 CREATE INDEX IF NOT EXISTS idx_tx_status ON transactions(status);
 CREATE INDEX IF NOT EXISTS idx_tx_date ON transactions(date);
+
+CREATE TABLE IF NOT EXISTS transaction_splits (
+    id TEXT PRIMARY KEY,
+    transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    category_id TEXT NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
+    sub_category_id TEXT REFERENCES sub_categories(id) ON DELETE RESTRICT,
+    amount REAL NOT NULL,
+    note TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_split_tx_id ON transaction_splits(transaction_id);
 
 CREATE TABLE IF NOT EXISTS installment_plans (
     id TEXT PRIMARY KEY,
@@ -92,35 +106,46 @@ CREATE INDEX IF NOT EXISTS idx_ip_status ON installment_payments(status);
 CREATE TABLE IF NOT EXISTS recurring_rules (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'expense' CHECK(type IN ('income', 'expense', 'transfer')),
+    frequency TEXT NOT NULL DEFAULT 'monthly' CHECK(frequency IN ('daily', 'weekly', 'biweekly', 'monthly', 'quarterly', 'yearly')),
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE RESTRICT,
+    to_account_id TEXT REFERENCES accounts(id) ON DELETE RESTRICT,
     amount REAL NOT NULL,
-    category_id TEXT NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
+    category_id TEXT REFERENCES categories(id) ON DELETE RESTRICT,
     sub_category_id TEXT REFERENCES sub_categories(id) ON DELETE RESTRICT,
-    start_month TEXT NOT NULL,
-    end_month TEXT,
-    day_of_month INTEGER NOT NULL DEFAULT 1 CHECK(day_of_month BETWEEN 1 AND 28),
+    start_date TEXT NOT NULL,
+    end_date TEXT,
+    max_instances INTEGER,
+    auto_add INTEGER NOT NULL DEFAULT 1,
     default_status TEXT NOT NULL DEFAULT 'pending' CHECK(default_status IN ('pending','posted')),
     is_active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    CHECK(max_instances IS NULL OR max_instances > 0),
+    CHECK(end_date IS NULL OR end_date >= start_date)
 );
 
 CREATE TABLE IF NOT EXISTS recurring_instances (
     id TEXT PRIMARY KEY,
     rule_id TEXT NOT NULL REFERENCES recurring_rules(id) ON DELETE CASCADE,
-    month TEXT NOT NULL,
+    date TEXT NOT NULL,
     generated_transaction_id TEXT NOT NULL UNIQUE REFERENCES transactions(id) ON DELETE RESTRICT,
     created_at TEXT NOT NULL,
-    UNIQUE(rule_id, month)
+    UNIQUE(rule_id, date)
 );
 
 CREATE TABLE IF NOT EXISTS budgets (
     id TEXT PRIMARY KEY,
     month TEXT NOT NULL,
     category_id TEXT NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
+    sub_category_id TEXT REFERENCES sub_categories(id) ON DELETE RESTRICT,
     amount REAL NOT NULL,
-    UNIQUE(month, category_id)
+    UNIQUE(month, category_id, sub_category_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_budget_month ON budgets(month);
+CREATE INDEX IF NOT EXISTS idx_budget_cat_sub ON budgets(category_id, sub_category_id);
+
 
 CREATE TABLE IF NOT EXISTS settings (
     id TEXT PRIMARY KEY,
@@ -129,4 +154,15 @@ CREATE TABLE IF NOT EXISTS settings (
     password_verifier TEXT,
     updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id TEXT PRIMARY KEY,
+    action TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT,
+    details TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_logs(created_at);
 `;

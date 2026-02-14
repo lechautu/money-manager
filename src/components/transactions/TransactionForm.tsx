@@ -7,6 +7,8 @@ import { CategoryService } from '../../services/CategoryService';
 import type { Category, SubCategory } from '../../services/CategoryService';
 import { Modal } from '../ui/Modal';
 import { useToast } from '../common/Toast';
+import { Plus, X } from 'lucide-react';
+import { formatDisplayDate } from '../../utils/dateUtils';
 
 interface TransactionFormProps {
     isOpen: boolean;
@@ -28,9 +30,14 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
     const [note, setNote] = useState('');
     const [status, setStatus] = useState<'posted' | 'pending'>('posted');
 
+    // Split State
+    const [isSplit, setIsSplit] = useState(false);
+    const [splitLines, setSplitLines] = useState<{ id: string; categoryId: string; subCategoryId: string; amount: string; note: string }[]>([]);
+
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
+    const [allSubCategories, setAllSubCategories] = useState<SubCategory[]>([]);
 
     const [loading, setLoading] = useState(false);
     const { showToast } = useToast();
@@ -58,6 +65,20 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
                 setSubCategoryId(initialData.sub_category_id || '');
                 setNote(initialData.note || '');
                 setStatus(initialData.status as any);
+
+                if (initialData.is_split) {
+                    setIsSplit(true);
+                    setSplitLines(initialData.splitLines?.map(l => ({
+                        id: l.id,
+                        categoryId: l.category_id,
+                        subCategoryId: l.sub_category_id || '',
+                        amount: l.amount.toString(),
+                        note: l.note || ''
+                    })) || []);
+                } else {
+                    setIsSplit(false);
+                    setSplitLines([]);
+                }
             } else if (defaultValues) {
                 setDate(defaultValues.date || new Date().toISOString().split('T')[0]);
                 // Handle extended defaultValues
@@ -83,10 +104,72 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
                 setType('expense');
                 setStatus('posted');
                 setNote('');
+                setIsSplit(false);
+                setSplitLines([]);
                 // Account/Category defaults handled after loadMeta or user selection
             }
         }
     }, [isOpen, initialData, defaultValues]);
+
+    // Handle Split Toggle Logic
+    const handleToggleSplit = () => {
+        if (!isSplit) {
+            // Turning ON
+            // Auto-create first line from existing values if present
+            const currentAmount = amount ? parseFloat(amount) : 0;
+            if (currentAmount > 0 || categoryId) {
+                setSplitLines([{
+                    id: Math.random().toString(36).substr(2, 9),
+                    categoryId: categoryId || '',
+                    subCategoryId: subCategoryId || '',
+                    amount: currentAmount > 0 ? currentAmount.toString() : '',
+                    note: note || ''
+                }]);
+            } else {
+                setSplitLines([]);
+            }
+            setIsSplit(true);
+        } else {
+            // Turning OFF
+            // calculate total amount
+            const total = splitLines.reduce((sum, line) => sum + (parseFloat(line.amount) || 0), 0);
+            setAmount(total > 0 ? total.toString() : '');
+
+            // Restore category from first line (optional UX improvement)
+            if (splitLines.length > 0) {
+                setCategoryId(splitLines[0].categoryId);
+                setSubCategoryId(splitLines[0].subCategoryId);
+            }
+
+            setIsSplit(false);
+        }
+    };
+
+    const addSplitLine = () => {
+        setSplitLines([...splitLines, {
+            id: Math.random().toString(36).substr(2, 9),
+            categoryId: '',
+            subCategoryId: '',
+            amount: '',
+            note: ''
+        }]);
+    };
+
+    const removeSplitLine = (index: number) => {
+        const newLines = [...splitLines];
+        newLines.splice(index, 1);
+        setSplitLines(newLines);
+    };
+
+    const updateSplitLine = (index: number, field: keyof typeof splitLines[0], value: string) => {
+        const newLines = [...splitLines];
+        newLines[index] = { ...newLines[index], [field]: value };
+        setSplitLines(newLines);
+    };
+
+    const getComputedTotal = () => {
+        return splitLines.reduce((sum, line) => sum + (parseFloat(line.amount) || 0), 0);
+    };
 
     // When category changes, load subcategories
     useEffect(() => {
@@ -98,12 +181,14 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
     }, [categoryId]);
 
     const loadMeta = async () => {
-        const [accs, cats] = await Promise.all([
+        const [accs, cats, allSubs] = await Promise.all([
             AccountService.getAll(),
-            CategoryService.getAll()
+            CategoryService.getAll(),
+            CategoryService.getAllSubCategories()
         ]);
         setAccounts(accs);
         setCategories(cats);
+        setAllSubCategories(allSubs);
 
         if (!initialData && !defaultValues?.account_id) {
             if (accs.length > 0) setAccountId(accs[0].id);
@@ -114,7 +199,12 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
     };
 
     const handleSubmit = async () => {
-        if (!amount || !accountId || !categoryId || !note) {
+        if (!accountId) {
+            showToast('Please select an account', 'error');
+            return;
+        }
+
+        if (!isSplit && (!amount || !categoryId)) {
             showToast('Please fill all required fields', 'error');
             return;
         }
@@ -132,26 +222,53 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
 
         setLoading(true);
         try {
-            const val = Math.abs(parseFloat(amount));
-            if (val <= 0) {
-                showToast('Please enter an amount greater than zero', 'error');
+            const val = amount ? Math.abs(parseFloat(amount)) : 0;
+            const computedTotal = isSplit ? getComputedTotal() : val;
+
+            if (computedTotal <= 0) {
+                showToast('Total amount must be greater than zero', 'error');
                 return;
+            }
+
+            if (isSplit) {
+                if (splitLines.length === 0) {
+                    showToast('Split transaction must have at least one line', 'error');
+                    return;
+                }
+                for (const line of splitLines) {
+                    if (!line.categoryId) {
+                        showToast('All split lines must have a category', 'error');
+                        return;
+                    }
+                    if (!parseFloat(line.amount) || parseFloat(line.amount) <= 0) {
+                        showToast('All split lines must have a valid amount', 'error');
+                        return;
+                    }
+                }
             }
 
             let savedTx: any;
             if (initialData) {
                 // Update existing record
+                const finalAmount = type === 'expense' ? -computedTotal : computedTotal;
                 const updateData: any = {
                     date,
-                    amount: type === 'expense' ? -val : val,
+                    amount: finalAmount,
                     account_id: accountId,
                     to_account_id: type === 'transfer' ? toAccountId : null,
-                    category_id: categoryId,
-                    sub_category_id: subCategoryId || null,
+                    category_id: isSplit ? undefined : categoryId,
+                    sub_category_id: isSplit ? undefined : (subCategoryId || null),
                     note,
                     status,
                     month: date.slice(0, 7),
-                    source: initialData.source // Preserve source
+                    source: initialData.source, // Preserve source
+                    is_split: isSplit ? 1 : 0,
+                    splitLines: isSplit ? splitLines.map(l => ({
+                        category_id: l.categoryId,
+                        sub_category_id: l.subCategoryId || null,
+                        amount: parseFloat(l.amount),
+                        note: l.note || null
+                    })) : []
                 };
                 await TransactionService.update(initialData.id, updateData);
                 savedTx = { ...initialData, ...updateData };
@@ -160,17 +277,27 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
                 if (type === 'transfer') {
                     savedTx = await TransactionService.transfer(accountId, toAccountId, val, date, categoryId, subCategoryId || undefined, note);
                 } else {
-                    const finalAmount = type === 'expense' ? -val : val;
+                    const finalAmount = isSplit
+                        ? (type === 'expense' ? -computedTotal : computedTotal)
+                        : (type === 'expense' ? -val : val);
+
                     const txData: any = {
                         date,
                         amount: finalAmount,
                         account_id: accountId,
-                        category_id: categoryId,
-                        sub_category_id: subCategoryId || null,
+                        category_id: isSplit ? undefined : categoryId,
+                        sub_category_id: isSplit ? undefined : (subCategoryId || null),
                         note,
                         status,
                         month: date.slice(0, 7),
-                        source: defaultValues?.source || 'manual'
+                        source: defaultValues?.source || 'manual',
+                        is_split: isSplit ? 1 : 0,
+                        splitLines: isSplit ? splitLines.map(l => ({
+                            category_id: l.categoryId,
+                            sub_category_id: l.subCategoryId || null,
+                            amount: parseFloat(l.amount),
+                            note: l.note || null
+                        })) : []
                     };
                     savedTx = await TransactionService.create(txData);
                 }
@@ -193,6 +320,7 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={initialData ? 'Edit Transaction' : 'New Transaction'}>
             <div className="space-y-4">
+                {/* Type Toggles */}
                 <div className="flex gap-2 p-1 bg-gray-800 rounded-lg">
                     <button
                         disabled={isReadOnly('type') || (initialData?.source === 'transfer')}
@@ -203,7 +331,7 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
                     </button>
                     <button
                         disabled={isReadOnly('type') || (initialData?.source === 'transfer')}
-                        className={`flex-1 py-1 text-sm rounded-md transition-colors ${type === 'income' ? 'bg-green-500 text-white' : 'text-gray-400 hover:text-white'} ${(isReadOnly('type') || (initialData?.source === 'transfer')) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`flex-1 py-1 text-sm rounded-md transition-colors ${type === 'income' ? 'bg-emerald-500 text-white' : 'text-gray-400 hover:text-white'} ${(isReadOnly('type') || (initialData?.source === 'transfer')) ? 'opacity-50 cursor-not-allowed' : ''}`}
                         onClick={() => !isReadOnly('type') && setType('income')}
                     >
                         Income
@@ -222,9 +350,28 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
                     </div>
                 )}
 
+                {/* Split Toggle */}
+                {type !== 'transfer' && (
+                    <div className="flex items-center justify-between pb-2 border-b border-gray-800">
+                        <label className="text-sm text-gray-400">Split Transaction</label>
+                        <button
+                            onClick={handleToggleSplit}
+                            className={`w-10 h-6 rounded-full transition-colors relative ${isSplit ? 'bg-primary' : 'bg-gray-700'}`}
+                        >
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${isSplit ? 'left-5' : 'left-1'}`} />
+                        </button>
+                    </div>
+                )}
+
+                {/* Date and Amount / Account Row */}
                 <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-xs text-gray-400 mb-1">Date</label>
+                        <div className="flex justify-between items-center mb-1">
+                            <label className="block text-xs text-gray-400">Date</label>
+                            <span className="text-[10px] text-primary font-medium">
+                                {formatDisplayDate(date)}
+                            </span>
+                        </div>
                         <input
                             type="date"
                             value={date}
@@ -233,30 +380,6 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
                             className={`w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary ${isReadOnly('date') ? 'opacity-50' : ''}`}
                         />
                     </div>
-                    <div>
-                        <label className="block text-xs text-gray-400 mb-1">Amount</label>
-                        <input
-                            type="number"
-                            min="0"
-                            step="any"
-                            value={amount}
-                            onChange={e => {
-                                const val = e.target.value.replace(/-/g, '');
-                                setAmount(val);
-                            }}
-                            onKeyDown={(e) => {
-                                if (e.key === '-') {
-                                    e.preventDefault();
-                                }
-                            }}
-                            placeholder="0"
-                            disabled={isReadOnly('amount')}
-                            className={`w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary ${isReadOnly('amount') ? 'opacity-50' : ''}`}
-                        />
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label className="block text-xs text-gray-400 mb-1">{type === 'transfer' ? 'From Account' : 'Account'}</label>
                         <select
@@ -271,91 +394,186 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
                             ))}
                         </select>
                     </div>
-
-                    {type === 'transfer' && (
-                        <div>
-                            <label className="block text-xs text-gray-400 mb-1">To Account</label>
-                            <select
-                                value={toAccountId}
-                                onChange={e => setToAccountId(e.target.value)}
-                                disabled={isReadOnly('toAccountId')}
-                                className={`w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary ${isReadOnly('toAccountId') ? 'opacity-50' : ''}`}
-                            >
-                                <option value="">Select Account</option>
-                                {accounts.map(a => (
-                                    <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>
-                                ))}
-                            </select>
-                        </div>
-                    )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                {type === 'transfer' && (
                     <div>
-                        <div className="flex justify-between items-center mb-1">
-                            <label className="block text-xs text-gray-400">Category</label>
-                            <button
-                                onClick={() => {
-                                    const name = prompt("Enter new category name:");
-                                    if (name) {
-                                        CategoryService.createCategory(name).then(newCat => {
-                                            setCategories([...categories, newCat]);
-                                            setCategoryId(newCat.id);
-                                        });
+                        <label className="block text-xs text-gray-400 mb-1">To Account</label>
+                        <select
+                            value={toAccountId}
+                            onChange={e => setToAccountId(e.target.value)}
+                            disabled={isReadOnly('toAccountId')}
+                            className={`w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary ${isReadOnly('toAccountId') ? 'opacity-50' : ''}`}
+                        >
+                            <option value="">Select Account</option>
+                            {accounts.map(a => (
+                                <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
+                {isSplit ? (
+                    <div className="space-y-3">
+                        {splitLines.map((line, idx) => (
+                            <div key={line.id} className="bg-gray-900/50 p-2 rounded border border-gray-800/50 relative">
+                                <button
+                                    onClick={() => removeSplitLine(idx)}
+                                    className="absolute -top-2 -right-2 p-1 bg-red-500/10 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-colors"
+                                >
+                                    <X size={12} />
+                                </button>
+                                <div className="grid grid-cols-2 gap-2 mb-2">
+                                    <select
+                                        value={line.categoryId}
+                                        onChange={e => updateSplitLine(idx, 'categoryId', e.target.value)}
+                                        className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white"
+                                    >
+                                        <option value="">Category</option>
+                                        {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                    </select>
+                                    <input
+                                        type="number"
+                                        value={line.amount}
+                                        onChange={e => updateSplitLine(idx, 'amount', e.target.value)}
+                                        placeholder="Amount"
+                                        className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <select
+                                        value={line.subCategoryId}
+                                        onChange={e => updateSplitLine(idx, 'subCategoryId', e.target.value)}
+                                        className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white"
+                                        disabled={!line.categoryId}
+                                    >
+                                        <option value="">Sub Category</option>
+                                        {line.categoryId ? (
+                                            allSubCategories
+                                                .filter(sc => sc.category_id === line.categoryId)
+                                                .map(sc => (
+                                                    <option key={sc.id} value={sc.id}>{sc.name}</option>
+                                                ))
+                                        ) : (
+                                            <option value="" disabled>Select Category First</option>
+                                        )}
+                                    </select>
+                                    <input
+                                        type="text"
+                                        value={line.note}
+                                        onChange={e => updateSplitLine(idx, 'note', e.target.value)}
+                                        placeholder="Note (opt)"
+                                        className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white"
+                                    />
+                                </div>
+                            </div>
+                        ))}
+                        <button
+                            onClick={addSplitLine}
+                            className="w-full py-2 flex items-center justify-center gap-2 text-xs text-primary border border-primary/30 rounded hover:bg-primary/10 transition-colors"
+                        >
+                            <Plus size={14} /> Add Split Line
+                        </button>
+                        <div className="flex justify-between items-center px-2 py-1 bg-gray-800 rounded text-sm">
+                            <span className="text-gray-400">Total:</span>
+                            <span className="font-bold text-white">{getComputedTotal()}</span>
+                        </div>
+                    </div>
+                ) : (
+                    <>
+                        {/* Amount - only in normal mode */}
+                        <div>
+                            <label className="block text-xs text-gray-400 mb-1">Amount</label>
+                            <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={amount}
+                                onChange={e => {
+                                    const val = e.target.value.replace(/-/g, '');
+                                    setAmount(val);
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === '-') {
+                                        e.preventDefault();
                                     }
                                 }}
-                                className="text-xs text-primary hover:text-blue-400"
-                            >
-                                + New
-                            </button>
+                                placeholder="0"
+                                disabled={isReadOnly('amount')}
+                                className={`w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary ${isReadOnly('amount') ? 'opacity-50' : ''}`}
+                            />
                         </div>
-                        <select
-                            value={categoryId}
-                            onChange={e => setCategoryId(e.target.value)}
-                            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary"
-                        >
-                            <option value="">Select Category</option>
-                            {categories.map(c => (
-                                <option key={c.id} value={c.id}>{c.name}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div>
-                        <div className="flex justify-between items-center mb-1">
-                            <label className="block text-xs text-gray-400">Sub Category</label>
-                            {categoryId && (
-                                <button
-                                    onClick={() => {
-                                        const name = prompt("Enter new sub-category name:");
-                                        if (name) {
-                                            CategoryService.createSubCategory(categoryId, name).then(newSub => {
-                                                setSubCategories([...subCategories, newSub]);
-                                                setSubCategoryId(newSub.id);
-                                            });
-                                        }
-                                    }}
-                                    className="text-xs text-primary hover:text-blue-400"
-                                >
-                                    + New
-                                </button>
-                            )}
-                        </div>
-                        <select
-                            value={subCategoryId}
-                            onChange={e => setSubCategoryId(e.target.value)}
-                            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary"
-                            disabled={!categoryId}
-                        >
-                            <option value="">Select Sub Category</option>
-                            {subCategories.map(c => (
-                                <option key={c.id} value={c.id}>{c.name}</option>
-                            ))}
-                        </select>
-                    </div>
-                </div>
 
+                        {/* Category Selection */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className="block text-xs text-gray-400">Category</label>
+                                    <button
+                                        onClick={() => {
+                                            const name = prompt("Enter new category name:");
+                                            if (name) {
+                                                CategoryService.createCategory(name).then(newCat => {
+                                                    setCategories([...categories, newCat]);
+                                                    setCategoryId(newCat.id);
+                                                });
+                                            }
+                                        }}
+                                        className="text-xs text-primary hover:text-blue-400"
+                                    >
+                                        + New
+                                    </button>
+                                </div>
+                                <select
+                                    value={categoryId}
+                                    onChange={e => setCategoryId(e.target.value)}
+                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary"
+                                >
+                                    <option value="">Select Category</option>
+                                    {categories.map(c => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className="block text-xs text-gray-400">Sub Category</label>
+                                    {categoryId && (
+                                        <button
+                                            onClick={() => {
+                                                const name = prompt("Enter new sub-category name:");
+                                                if (name) {
+                                                    CategoryService.createSubCategory(categoryId, name).then(newSub => {
+                                                        setSubCategories([...subCategories, newSub]);
+                                                        setSubCategoryId(newSub.id);
+                                                    });
+                                                }
+                                            }}
+                                            className="text-xs text-primary hover:text-blue-400"
+                                        >
+                                            + New
+                                        </button>
+                                    )}
+                                </div>
+                                <select
+                                    value={subCategoryId}
+                                    onChange={e => setSubCategoryId(e.target.value)}
+                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary"
+                                    disabled={!categoryId}
+                                >
+                                    <option value="">Select Sub Category</option>
+                                    {subCategories.map(c => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                    </>
+                )}
+
+                {/* Common Note Field */}
                 <div>
-                    <label className="block text-xs text-gray-400 mb-1">Note</label>
+                    <label className="block text-xs text-gray-400 mb-1">Note (optional)</label>
                     <textarea
                         value={note}
                         onChange={e => setNote(e.target.value)}
@@ -365,17 +583,18 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
                     />
                 </div>
 
-                {type !== 'transfer' && (
-                    <div className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            id="status"
-                            checked={status === 'pending'}
-                            onChange={e => setStatus(e.target.checked ? 'pending' : 'posted')}
-                        />
-                        <label htmlFor="status" className="text-sm text-gray-300">Mark as pending</label>
-                    </div>
-                )}
+                <div>
+                    <label className="block text-xs text-gray-400 mb-1">Status</label>
+                    <select
+                        value={status}
+                        onChange={e => setStatus(e.target.value as any)}
+                        className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary"
+                    >
+                        <option value="posted">Posted</option>
+                        <option value="pending">Pending</option>
+                        <option value="ignored">Ignored</option>
+                    </select>
+                </div>
 
                 <div className="flex justify-end gap-2 pt-2 border-t border-gray-800">
                     <button
@@ -394,6 +613,6 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
                     </button>
                 </div>
             </div>
-        </Modal >
+        </Modal>
     );
 }

@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react';
 import { format, subMonths, addMonths, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
-import { ChevronLeft, ChevronRight, BarChart3 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, BarChart3, PieChart as PieChartIcon, TrendingUp } from 'lucide-react';
+import { formatMonthYear, formatDisplayDate } from '../utils/dateUtils';
 import { StatisticsService } from '../services/StatisticsService';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
     PieChart as RePieChart, Pie, Cell, Legend
 } from 'recharts';
+import TrendsPage from './TrendsPage';
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#8dd1e1'];
+const COLORS = ['#0088FE', '#10B981', '#FFBB28', '#FF8042', '#8884d8', '#34D399', '#ffc658', '#8dd1e1'];
 
-export default function AnalyticsPage() {
+function AnalyticsOverview() {
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [dailyData, setDailyData] = useState<any[]>([]);
     const [categoryData, setCategoryData] = useState<any[]>([]);
@@ -55,21 +57,19 @@ export default function AnalyticsPage() {
     const totalExpense = categoryData.reduce((sum, item) => sum + item.value, 0);
 
     const formatMoney = (amount: number) => {
-        return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'VND' }).format(amount);
     };
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <h1 className="text-2xl font-bold flex items-center gap-2">
-                    <BarChart3 className="text-primary" /> Analytics
-                </h1>
-                <div className="flex items-center gap-4 bg-gray-900 px-4 py-2 rounded-lg border border-gray-800">
+            <div className="flex justify-between items-center bg-gray-900 p-4 rounded-xl border border-gray-800">
+                <h2 className="text-lg font-semibold text-gray-300">Monthly Overview</h2>
+                <div className="flex items-center gap-4">
                     <button onClick={handlePrevMonth} className="text-gray-400 hover:text-white">
                         <ChevronLeft size={20} />
                     </button>
-                    <span className="font-semibold w-32 text-center">
-                        {format(currentMonth, 'MMMM yyyy')}
+                    <span className="font-semibold w-full px-2 text-center text-white capitalize">
+                        {formatMonthYear(currentMonth)}
                     </span>
                     <button onClick={handleNextMonth} className="text-gray-400 hover:text-white">
                         <ChevronRight size={20} />
@@ -103,8 +103,14 @@ export default function AnalyticsPage() {
                                     axisLine={false}
                                 />
                                 <RechartsTooltip
-                                    contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#F3F4F6' }}
+                                    contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#F3F4F6', borderRadius: '8px' }}
                                     formatter={(value: any) => [formatMoney(Number(value) || 0), 'Spending']}
+                                    labelFormatter={(_label, payload) => {
+                                        if (payload && payload[0]) {
+                                            return formatDisplayDate(payload[0].payload.fullDate);
+                                        }
+                                        return '';
+                                    }}
                                 />
                                 <Bar dataKey="value" fill="#3B82F6" radius={[4, 4, 0, 0]} />
                             </BarChart>
@@ -138,7 +144,7 @@ export default function AnalyticsPage() {
                                         ))}
                                     </Pie>
                                     <RechartsTooltip
-                                        contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#F3F4F6' }}
+                                        contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#F3F4F6', borderRadius: '8px' }}
                                         formatter={(value: any) => formatMoney(Number(value) || 0)}
                                     />
                                     <Legend
@@ -157,6 +163,37 @@ export default function AnalyticsPage() {
                     </div>
                 </div>
             </div>
+        </div>
+    );
+}
+
+export default function AnalyticsPage() {
+    const [tab, setTab] = useState<'overview' | 'trends'>('overview');
+
+    return (
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                <h1 className="text-2xl font-bold flex items-center gap-2">
+                    <BarChart3 className="text-primary" /> Analytics
+                </h1>
+
+                <div className="flex bg-gray-900 rounded-lg p-1 border border-gray-800">
+                    <button
+                        onClick={() => setTab('overview')}
+                        className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${tab === 'overview' ? 'bg-primary text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        <PieChartIcon size={16} /> Overview
+                    </button>
+                    <button
+                        onClick={() => setTab('trends')}
+                        className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${tab === 'trends' ? 'bg-primary text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        <TrendingUp size={16} /> Trends
+                    </button>
+                </div>
+            </div>
+
+            {tab === 'overview' ? <AnalyticsOverview /> : <TrendsPage />}
         </div>
     );
 }

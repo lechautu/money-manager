@@ -129,12 +129,12 @@ export const InstallmentService = {
 
             await run(
                 `INSERT INTO transactions 
-                (id, account_id, date, month, amount, category_id, sub_category_id, status, note, source, source_ref_id, created_at, updated_at) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                (id, account_id, date, month, amount, category_id, sub_category_id, status, note, source, source_ref_id, is_split, created_at, updated_at) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     txId, p.credit_account_id, p.due_date, p.due_month, -p.amount,
                     p.payment_category_id, p.payment_sub_category_id || null, 'posted', note,
-                    'installment', p.id, now, now
+                    'installment', p.id, 0, now, now
                 ]
             );
 

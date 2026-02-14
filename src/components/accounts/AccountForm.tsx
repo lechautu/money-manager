@@ -15,6 +15,7 @@ export function AccountForm({ isOpen, onClose, initialData, onSuccess }: Account
     const [name, setName] = useState('');
     const [type, setType] = useState<'bank' | 'credit' | 'debit'>('bank');
     const [currency, setCurrency] = useState('VND');
+    const [initialBalance, setInitialBalance] = useState('0');
     const [note, setNote] = useState('');
     const [loading, setLoading] = useState(false);
     const { showToast } = useToast();
@@ -24,6 +25,7 @@ export function AccountForm({ isOpen, onClose, initialData, onSuccess }: Account
             setName(initialData.name);
             setType(initialData.type);
             setCurrency(initialData.currency);
+            setInitialBalance(initialData.initial_balance.toString());
             setNote(initialData.note || '');
         } else {
             // Reset for new
@@ -31,6 +33,7 @@ export function AccountForm({ isOpen, onClose, initialData, onSuccess }: Account
                 setName('');
                 setType('bank');
                 setCurrency('VND');
+                setInitialBalance('0');
                 setNote('');
             }
         }
@@ -40,16 +43,35 @@ export function AccountForm({ isOpen, onClose, initialData, onSuccess }: Account
         e.preventDefault();
         setLoading(true);
         try {
+            const balanceVal = parseFloat(initialBalance) || 0;
             if (initialData) {
-                await AccountService.update(initialData.id, { name, type, currency, note });
+                await AccountService.update(initialData.id, { name, type, currency, initial_balance: balanceVal, note });
             } else {
-                await AccountService.create({ name, type, currency, note });
+                await AccountService.create({ name, type, currency, initial_balance: balanceVal, note });
             }
             showToast(initialData ? 'Account updated successfully' : 'Account created successfully');
             onSuccess();
             onClose();
         } catch (e) {
             showToast('Failed to save account', 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!initialData) return;
+        if (!window.confirm(`Are you sure you want to delete account "${initialData.name}"? This action cannot be undone.`)) return;
+
+        setLoading(true);
+        try {
+            await AccountService.delete(initialData.id);
+            showToast('Account deleted successfully');
+            onSuccess();
+            onClose();
+        } catch (e: any) {
+            console.error(e);
+            showToast(e.message || 'Failed to delete account', 'error');
         } finally {
             setLoading(false);
         }
@@ -69,7 +91,7 @@ export function AccountForm({ isOpen, onClose, initialData, onSuccess }: Account
                         type="text"
                         value={name}
                         onChange={e => setName(e.target.value)}
-                        className="w-full bg-gray-800 border border-block border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-primary"
+                        className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-primary"
                         placeholder="e.g. Vietcombank"
                     />
                 </div>
@@ -102,6 +124,20 @@ export function AccountForm({ isOpen, onClose, initialData, onSuccess }: Account
                 </div>
 
                 <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Initial Balance</label>
+                    <input
+                        required
+                        type="number"
+                        step="any"
+                        value={initialBalance}
+                        onChange={e => setInitialBalance(e.target.value)}
+                        className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-primary"
+                        placeholder="0"
+                    />
+                    <p className="text-[10px] text-gray-500 mt-1 italic">* This historical balance doesn't affect your transaction reports.</p>
+                </div>
+
+                <div>
                     <label className="block text-xs font-medium text-gray-400 mb-1">Note (Optional)</label>
                     <textarea
                         value={note}
@@ -110,21 +146,32 @@ export function AccountForm({ isOpen, onClose, initialData, onSuccess }: Account
                     />
                 </div>
 
-                <div className="pt-4 flex justify-end gap-3">
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="px-4 py-2 rounded text-sm text-gray-400 hover:text-white"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="px-4 py-2 bg-primary hover:bg-blue-600 rounded text-sm text-white font-medium disabled:opacity-50"
-                    >
-                        {loading ? 'Saving...' : initialData ? 'Update Account' : 'Create Account'}
-                    </button>
+                <div className="pt-4 flex justify-between gap-3">
+                    {initialData ? (
+                        <button
+                            type="button"
+                            onClick={handleDelete}
+                            className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded text-sm font-medium transition-colors"
+                        >
+                            Delete
+                        </button>
+                    ) : <div></div>}
+                    <div className="flex gap-3">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="px-4 py-2 rounded text-sm text-gray-400 hover:text-white"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="px-4 py-2 bg-primary hover:bg-blue-600 rounded text-sm text-white font-medium disabled:opacity-50"
+                        >
+                            {loading ? 'Saving...' : initialData ? 'Update Account' : 'Create Account'}
+                        </button>
+                    </div>
                 </div>
             </form>
         </Modal>
