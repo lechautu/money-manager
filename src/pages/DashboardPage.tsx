@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { StatisticsService } from '../services/StatisticsService';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import { ArrowUp, ArrowDown, Wallet } from 'lucide-react';
 import { formatDisplayDate } from '../utils/dateUtils';
 
@@ -97,36 +97,71 @@ export default function DashboardPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Expense Chart */}
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 min-h-[300px]">
-                    <h2 className="text-lg font-semibold mb-4">Expense Structure</h2>
+                <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 overflow-hidden">
+                    <h2 className="text-lg font-semibold mb-6">Expense Structure</h2>
                     {expenseByCat.length > 0 ? (
-                        <div className="h-[250px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie
-                                        data={expenseByCat}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={60}
-                                        outerRadius={80}
-                                        paddingAngle={5}
-                                        dataKey="value"
-                                    >
-                                        {expenseByCat.map((_entry: unknown, index: number) => (
-                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    <RechartsTooltip
-                                        formatter={(value: number | undefined) => value !== undefined ? formatMoney(value) : '0'}
-                                        contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
-                                        itemStyle={{ color: '#f3f4f6' }}
-                                    />
-                                    <Legend />
-                                </PieChart>
-                            </ResponsiveContainer>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                            <div className="h-[250px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={expenseByCat.slice(0, 6)}
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={60}
+                                            outerRadius={80}
+                                            paddingAngle={4}
+                                            dataKey="value"
+                                        >
+                                            {expenseByCat.slice(0, 6).map((_entry: unknown, index: number) => (
+                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
+                                            ))}
+                                        </Pie>
+                                        <RechartsTooltip
+                                            formatter={(value: number | undefined) => value !== undefined ? formatMoney(value) : '0'}
+                                            contentStyle={{ backgroundColor: '#111827', border: 'none', borderRadius: '8px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}
+                                            itemStyle={{ color: '#f3f4f6' }}
+                                        />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+
+                            <div className="space-y-3 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
+                                {expenseByCat.slice(0, 8).map((item, index) => {
+                                    const total = expenseByCat.reduce((acc, curr) => acc + curr.value, 0);
+                                    const percent = Math.round((item.value / total) * 100);
+
+                                    return (
+                                        <div key={index} className="flex flex-col gap-1">
+                                            <div className="flex justify-between items-center text-sm">
+                                                <div className="flex items-center gap-2 truncate pr-4">
+                                                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: index < 6 ? COLORS[index % COLORS.length] : '#374151' }}></div>
+                                                    <span className="text-gray-300 truncate" title={item.name}>{item.name}</span>
+                                                </div>
+                                                <span className="text-white font-bold shrink-0">{percent}%</span>
+                                            </div>
+                                            <div className="w-full bg-gray-800 h-1 rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full rounded-full opacity-60"
+                                                    style={{
+                                                        width: `${percent}%`,
+                                                        backgroundColor: index < 6 ? COLORS[index % COLORS.length] : '#374151'
+                                                    }}
+                                                ></div>
+                                            </div>
+                                            <div className="text-[10px] text-gray-500 text-right">{formatMoney(item.value)}</div>
+                                        </div>
+                                    );
+                                })}
+                                {expenseByCat.length > 8 && (
+                                    <div className="text-[10px] text-center text-gray-600 italic py-1">
+                                        + {expenseByCat.length - 8} more items
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     ) : (
-                        <div className="h-full flex items-center justify-center text-gray-500">
+                        <div className="h-[250px] flex items-center justify-center text-gray-500">
                             No expense data for this month
                         </div>
                     )}

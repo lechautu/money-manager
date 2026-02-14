@@ -69,27 +69,34 @@ export const StatisticsService = {
     },
 
     async getExpenseByCategory(month: string) {
-        return await run(`
+        const rows = await run(`
             SELECT 
-                c.name,
+                c.name as category_name,
+                sc.name as sub_category_name,
                 SUM(combined.amount) as value
             FROM (
-                SELECT t.category_id, ABS(t.amount) as amount
+                SELECT t.category_id, t.sub_category_id, ABS(t.amount) as amount
                 FROM transactions t
                 WHERE t.is_split = 0 AND t.month = ? AND t.amount < 0 AND t.status = 'posted' AND t.source != 'transfer' AND t.deleted_at IS NULL
                 
                 UNION ALL
                 
-                SELECT s.category_id, ABS(s.amount)
+                SELECT s.category_id, s.sub_category_id, ABS(s.amount)
                 FROM transaction_splits s
                 JOIN transactions t ON s.transaction_id = t.id
                 WHERE t.is_split = 1 AND t.month = ? AND t.status = 'posted' AND t.source != 'transfer' AND t.deleted_at IS NULL
             ) combined
             JOIN categories c ON combined.category_id = c.id
-            GROUP BY c.name
+            LEFT JOIN sub_categories sc ON combined.sub_category_id = sc.id
+            GROUP BY c.id, combined.sub_category_id
             HAVING value > 0
             ORDER BY value DESC
         `, [month, month]);
+
+        return rows.map((r: any) => ({
+            ...r,
+            name: r.sub_category_name ? `${r.category_name} > ${r.sub_category_name}` : r.category_name
+        }));
     },
 
     async getDailySpending(month: string) {
