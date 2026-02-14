@@ -90,11 +90,106 @@ export const BudgetService = {
     },
 
     async getMonthSummary(month: string) {
-        const budgets = await this.getBudgetsForMonth(month);
-        const totalBudget = budgets.reduce((sum, b) => sum + b.amount, 0);
-        const totalSpent = budgets.reduce((sum, b) => sum + (b.spent || 0), 0);
+        // 1. Total Budget defined for the month
+        const budgets = await run('SELECT SUM(amount) as totalBudget FROM budgets WHERE month = ?', [month]);
+        const totalBudget = budgets[0]?.totalBudget || 0;
+
+        // 2. Total Monthly Spending (regardless of whether a budget exists for the category)
+        const spending = await run(`
+            SELECT SUM(ABS(amount)) as totalSpent
+            FROM transactions
+            WHERE month = ? 
+              AND status = 'posted' 
+              AND amount < 0 
+              AND (source != 'transfer' OR source IS NULL)
+              AND deleted_at IS NULL
+        `, [month]);
+        const totalSpent = spending[0]?.totalSpent || 0;
+
         return { totalBudget, totalSpent };
+    },
+
+    async generateBudgetsFromAutomation(month: string): Promise<void> {
+        const year = parseInt(month.split('-')[0]);
+        const m = parseInt(month.split('-')[1]) - 1;
+        const startOfMonthDate = new Date(year, m, 1);
+        const endOfMonthDate = endOfMonth(startOfMonthDate);
+
+        const automatedCosts: Record<string, { category_id: string, sub_category_id: string | null, amount: number }> = {};
+
+        const addCost = (catId: string, subCatId: string | null, amount: number) => {
+            const key = `${catId}-${subCatId || 'root'}`;
+            if (!automatedCosts[key]) {
+                automatedCosts[key] = { category_id: catId, sub_category_id: subCatId, amount: 0 };
+            }
+            automatedCosts[key].amount += Math.abs(amount);
+        };
+
+        // 1. Recurring Rules
+        const rules = await run("SELECT * FROM recurring_rules WHERE is_active = 1 AND type = 'expense'");
+        for (const rule of rules) {
+            let current = parseISO(rule.start_date);
+            const endDateLimit = rule.end_date ? parseISO(rule.end_date) : null;
+
+            // Advance to start of month
+            while (isBefore(current, startOfMonthDate)) {
+                current = RecurringService.getNextDate(current, rule.frequency);
+            }
+
+            // Count occurrences in this month
+            while (!isAfter(current, endOfMonthDate)) {
+                if (endDateLimit && isAfter(current, endDateLimit)) break;
+
+                // Final check: is this instance in our target month?
+                if (format(current, 'yyyy-MM') === month) {
+                    addCost(rule.category_id, rule.sub_category_id, rule.amount);
+                }
+
+                current = RecurringService.getNextDate(current, rule.frequency);
+                // Safety break
+                if (isAfter(current, addYears(endOfMonthDate, 1))) break;
+            }
+        }
+
+        // 2. Installments
+        const installments = await run(`
+            SELECT p.amount, pl.payment_category_id, pl.payment_sub_category_id 
+            FROM installment_payments p
+            JOIN installment_plans pl ON p.plan_id = pl.id
+            WHERE p.due_month = ?
+        `, [month]);
+
+        for (const inst of installments) {
+            addCost(inst.payment_category_id, inst.payment_sub_category_id, inst.amount);
+        }
+
+        // 3. Upsert into budgets
+        for (const group of Object.values(automatedCosts)) {
+            await this.setBudget(month, group.category_id, group.sub_category_id, group.amount);
+        }
+    },
+
+    async cloneMonthBudget(sourceMonth: string, targetMonth: string): Promise<void> {
+        const sourceBudgets = await run('SELECT * FROM budgets WHERE month = ?', [sourceMonth]);
+        if (sourceBudgets.length === 0) return;
+
+        for (const b of sourceBudgets) {
+            await this.setBudget(targetMonth, b.category_id, b.sub_category_id, b.amount);
+        }
+    },
+
+    async clearMonthBudgets(month: string): Promise<void> {
+        await run('DELETE FROM budgets WHERE month = ?', [month]);
+    },
+
+    async bulkDeleteBudgets(ids: string[]): Promise<void> {
+        if (ids.length === 0) return;
+        const placeholders = ids.map(() => '?').join(',');
+        await run(`DELETE FROM budgets WHERE id IN (${placeholders})`, ids);
     }
 };
+
+import { endOfMonth, isAfter, isBefore, parseISO, format, addYears } from 'date-fns';
+import { RecurringService } from './RecurringService';
 
 

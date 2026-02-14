@@ -1,188 +1,232 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { format, startOfMonth, endOfMonth, subMonths, addMonths } from 'date-fns';
 import { StatisticsService } from '../services/StatisticsService';
+import { AccountService } from '../services/AccountService';
+import { TransactionService } from '../services/TransactionService';
+import { BudgetService } from '../services/BudgetService';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
-import { ArrowUp, ArrowDown, Wallet } from 'lucide-react';
-import { formatDisplayDate } from '../utils/dateUtils';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-const COLORS = ['#0088FE', '#10B981', '#FFBB28', '#FF8042', '#8884d8', '#34D399'];
+// Components
+import NetCashflowCard from '../components/dashboard/NetCashflowCard';
+import PendingSummaryCard from '../components/dashboard/PendingSummaryCard';
+import BudgetStatusCard from '../components/dashboard/BudgetStatusCard';
+import AccountLiquidityList from '../components/dashboard/AccountLiquidityList';
+import UpcomingPaymentsList from '../components/dashboard/UpcomingPaymentsList';
+import CashflowTrendChart from '../components/dashboard/CashflowTrendChart';
 
-export default function DashboardPage() {
-    const [summary, setSummary] = useState<any>(null);
-    const [recentTxs, setRecentTxs] = useState<any[]>([]);
-    const [expenseByCat, setExpenseByCat] = useState<any[]>([]);
+export function DashboardPage() {
+    const [currentMonth, setCurrentMonth] = useState(new Date());
     const [loading, setLoading] = useState(true);
-    const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+    const [summary, setSummary] = useState<any>({ income: 0, expense: 0, balances: [] });
+    const [expenseCategoryData, setExpenseCategoryData] = useState<any[]>([]);
+    const [cashflowTrend, setCashflowTrend] = useState<any[]>([]);
+    const [pendingSummary, setPendingSummary] = useState<any>({ count: 0, total_amount: 0 });
+    const [budgetSummary, setBudgetSummary] = useState<any>({ totalBudget: 0, totalSpent: 0 });
+    const [upcomingPayments, setUpcomingPayments] = useState<any[]>([]);
+    const [accounts, setAccounts] = useState<any[]>([]);
 
     useEffect(() => {
         loadData();
-    }, [month]);
+    }, [currentMonth]);
 
     const loadData = async () => {
         setLoading(true);
+        const monthStr = format(currentMonth, 'yyyy-MM');
+        const startDateStr = format(startOfMonth(currentMonth), 'yyyy-MM-dd');
+        const endDateStr = format(endOfMonth(currentMonth), 'yyyy-MM-dd');
+
         try {
-            const [sum, recents, cats] = await Promise.all([
-                StatisticsService.getDashboardSummary(month),
-                StatisticsService.getRecentTransactions(5),
-                StatisticsService.getExpenseByCategory(month)
+            const [
+                stats,
+                expenseStructure,
+                trend,
+                pending,
+                upcoming,
+                budget,
+                allAccounts,
+                allBalances
+            ] = await Promise.all([
+                StatisticsService.getDashboardSummary(monthStr),
+                StatisticsService.getExpenseByCategory(monthStr),
+                StatisticsService.getCashflowTrend(startDateStr, endDateStr),
+                StatisticsService.getPendingSummary(),
+                StatisticsService.getUpcomingPayments(30),
+                BudgetService.getMonthSummary(monthStr),
+                AccountService.getAll(),
+                TransactionService.getBalances()
             ]);
-            setSummary(sum);
-            setRecentTxs(recents);
-            setExpenseByCat(cats);
-        } catch (e) {
-            console.error(e);
+
+            setSummary(stats);
+            setExpenseCategoryData(expenseStructure);
+            setCashflowTrend(trend);
+            setPendingSummary(pending);
+            setUpcomingPayments(upcoming);
+            setBudgetSummary(budget);
+
+            // Merge accounts with balances
+            const liquidityAccounts = allAccounts.map(acc => ({
+                ...acc,
+                balance: allBalances[acc.id] || { posted: 0, effective: 0 }
+            }));
+            setAccounts(liquidityAccounts);
+
+        } catch (error) {
+            console.error("Failed to load dashboard data", error);
         } finally {
             setLoading(false);
         }
     };
 
-    const formatMoney = (amount: number, currency: string = 'VND') => {
-        return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
+    const handleMonthChange = (direction: 'prev' | 'next') => {
+        setCurrentMonth(prev => direction === 'prev' ? subMonths(prev, 1) : addMonths(prev, 1));
     };
 
-    if (loading) return <div className="p-8 text-center text-gray-500">Loading dashboard...</div>;
+    // Colors for Pie Chart
+    const COLORS = ['#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#6B7280'];
+
+    const topExpenses = useMemo(() => {
+        if (!expenseCategoryData || expenseCategoryData.length === 0) return [];
+        const sorted = [...expenseCategoryData].sort((a, b) => b.value - a.value);
+        const top5 = sorted.slice(0, 5);
+        const others = sorted.slice(5).reduce((sum, item) => sum + item.value, 0);
+
+        if (others > 0) {
+            return [...top5, { name: 'Others', value: others, color: '#9CA3AF' }];
+        }
+        return top5;
+    }, [expenseCategoryData]);
+
+    const formatMoney = (amount: number) =>
+        new Intl.NumberFormat('en-US', { style: 'currency', currency: 'VND' }).format(amount);
+
+    if (loading) {
+        return <div className="flex h-96 items-center justify-center text-gray-500">Loading dashboard...</div>;
+    }
 
     return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <h1 className="text-2xl font-bold">Dashboard</h1>
-                <input
-                    type="month"
-                    value={month}
-                    onChange={e => setMonth(e.target.value)}
-                    className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none"
-                />
-            </div>
-
-            {/* Balances & Month Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Net Worth / Balances */}
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 md:col-span-1">
-                    <h2 className="text-sm text-gray-400 font-medium mb-3 flex items-center gap-2">
-                        <Wallet size={16} /> Total Balance
-                    </h2>
-                    <div className="space-y-2">
-                        {summary?.balances.map((b: any) => (
-                            <div key={b.currency} className="flex justify-between items-baseline">
-                                <span className="text-xs text-gray-500">{b.currency}</span>
-                                <span className="text-xl font-bold text-white">{formatMoney(b.balance, b.currency)}</span>
-                            </div>
-                        ))}
-                    </div>
+        <div className="space-y-6 animate-fade-in">
+            {/* Header / Month Selector */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Dashboard</h1>
+                    <p className="text-sm text-gray-500">Financial overview for {format(currentMonth, 'MMMM yyyy')}</p>
                 </div>
 
-                {/* Income */}
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                    <h2 className="text-sm text-gray-400 font-medium mb-1 flex items-center gap-2">
-                        <ArrowUp size={16} className="text-emerald-500" /> Income
-                    </h2>
-                    <div className="text-2xl font-bold text-emerald-500 mt-2">
-                        {formatMoney(summary?.income, 'VND')}
-                        <span className="text-xs text-gray-500 font-normal ml-2">(Est. Base)</span>
-                    </div>
-                    <p className="text-xs text-gray-600 mt-1">This month</p>
-                </div>
-
-                {/* Expense */}
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                    <h2 className="text-sm text-gray-400 font-medium mb-1 flex items-center gap-2">
-                        <ArrowDown size={16} className="text-red-500" /> Expense
-                    </h2>
-                    <div className="text-2xl font-bold text-white mt-2">
-                        {formatMoney(Math.abs(summary?.expense), 'VND')}
-                        <span className="text-xs text-gray-500 font-normal ml-2">(Est. Base)</span>
-                    </div>
-                    <p className="text-xs text-gray-600 mt-1">This month</p>
+                <div className="flex items-center bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-1">
+                    <button onClick={() => handleMonthChange('prev')} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md text-gray-500 transition-colors">
+                        <ChevronLeft size={20} />
+                    </button>
+                    <span className="px-4 font-medium text-gray-700 dark:text-gray-200 min-w-[140px] text-center">
+                        {format(currentMonth, 'MMMM yyyy')}
+                    </span>
+                    <button onClick={() => handleMonthChange('next')} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md text-gray-500 transition-colors">
+                        <ChevronRight size={20} />
+                    </button>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Expense Chart */}
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 overflow-hidden">
-                    <h2 className="text-lg font-semibold mb-6">Expense Structure</h2>
-                    {expenseByCat.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-                            <div className="h-[250px] w-full">
+            {/* Top Stats Row - Full Width */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <NetCashflowCard income={summary.income} expense={summary.expense} />
+                <BudgetStatusCard totalBudget={budgetSummary.totalBudget} totalSpent={budgetSummary.totalSpent} />
+                <PendingSummaryCard count={pendingSummary.count} amount={pendingSummary.total_amount} />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Main Content Layout (Sidebar on right for desktop) */}
+                <div className="lg:col-span-2 space-y-6">
+                    {/* Cashflow Trend */}
+                    <div className="h-[400px]">
+                        <CashflowTrendChart data={cashflowTrend} />
+                    </div>
+
+                    {/* Expense Structure */}
+                    <div className="bg-white dark:bg-gray-900 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-800">
+                        <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6">Expense Structure</h3>
+                        <div className="flex flex-col md:flex-row items-center gap-8">
+                            {/* Pie Chart */}
+                            <div className="w-full md:w-1/2 h-[300px] flex items-center justify-center relative">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
                                         <Pie
-                                            data={expenseByCat.slice(0, 6)}
+                                            data={topExpenses}
                                             cx="50%"
                                             cy="50%"
                                             innerRadius={60}
-                                            outerRadius={80}
-                                            paddingAngle={4}
+                                            outerRadius={100}
+                                            paddingAngle={5}
                                             dataKey="value"
                                         >
-                                            {expenseByCat.slice(0, 6).map((_entry: unknown, index: number) => (
-                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
+                                            {topExpenses.map((_, index) => (
+                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                             ))}
                                         </Pie>
                                         <RechartsTooltip
-                                            formatter={(value: number | undefined) => value !== undefined ? formatMoney(value) : '0'}
-                                            contentStyle={{ backgroundColor: '#111827', border: 'none', borderRadius: '8px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}
+                                            formatter={(value: number | undefined) => value !== undefined ? formatMoney(value) : ''}
+                                            contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6', borderRadius: '8px' }}
                                             itemStyle={{ color: '#f3f4f6' }}
                                         />
                                     </PieChart>
                                 </ResponsiveContainer>
+                                {/* Center Text */}
+                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                    <span className="text-xs text-gray-400 font-medium">Total Expense</span>
+                                    <span className="text-xl font-bold text-gray-800 dark:text-white mt-1">
+                                        {formatMoney(Math.abs(summary.expense))}
+                                    </span>
+                                </div>
                             </div>
 
-                            <div className="space-y-3 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
-                                {expenseByCat.slice(0, 8).map((item, index) => {
-                                    const total = expenseByCat.reduce((acc, curr) => acc + curr.value, 0);
-                                    const percent = Math.round((item.value / total) * 100);
-
+                            {/* Detailed List */}
+                            <div className="w-full md:w-1/2 space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                                {expenseCategoryData.map((item, index) => {
+                                    const percent = Math.abs(summary.expense) > 0 ? (item.value / Math.abs(summary.expense)) * 100 : 0;
                                     return (
-                                        <div key={index} className="flex flex-col gap-1">
-                                            <div className="flex justify-between items-center text-sm">
-                                                <div className="flex items-center gap-2 truncate pr-4">
-                                                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: index < 6 ? COLORS[index % COLORS.length] : '#374151' }}></div>
-                                                    <span className="text-gray-300 truncate" title={item.name}>{item.name}</span>
+                                        <div key={index} className="group">
+                                            <div className="flex justify-between text-sm mb-1">
+                                                <span className="font-medium text-gray-700 dark:text-gray-300 truncate max-w-[180px]" title={item.name}>
+                                                    {item.name}
+                                                </span>
+                                                <div className="text-right">
+                                                    <span className="font-bold text-gray-800 dark:text-white block">
+                                                        {formatMoney(item.value)}
+                                                    </span>
                                                 </div>
-                                                <span className="text-white font-bold shrink-0">{percent}%</span>
                                             </div>
-                                            <div className="w-full bg-gray-800 h-1 rounded-full overflow-hidden">
-                                                <div
-                                                    className="h-full rounded-full opacity-60"
-                                                    style={{
-                                                        width: `${percent}%`,
-                                                        backgroundColor: index < 6 ? COLORS[index % COLORS.length] : '#374151'
-                                                    }}
-                                                ></div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                                                    <div
+                                                        className="h-full rounded-full transition-all duration-500 ease-out"
+                                                        style={{
+                                                            width: `${percent}%`,
+                                                            backgroundColor: COLORS[index % COLORS.length]
+                                                        }}
+                                                    />
+                                                </div>
+                                                <span className="text-xs text-gray-500 w-10 text-right">{percent.toFixed(1)}%</span>
                                             </div>
-                                            <div className="text-[10px] text-gray-500 text-right">{formatMoney(item.value)}</div>
                                         </div>
                                     );
                                 })}
-                                {expenseByCat.length > 8 && (
-                                    <div className="text-[10px] text-center text-gray-600 italic py-1">
-                                        + {expenseByCat.length - 8} more items
-                                    </div>
+                                {expenseCategoryData.length === 0 && (
+                                    <div className="text-center text-gray-500 py-8">No expenses this month</div>
                                 )}
                             </div>
                         </div>
-                    ) : (
-                        <div className="h-[250px] flex items-center justify-center text-gray-500">
-                            No expense data for this month
-                        </div>
-                    )}
+                    </div>
                 </div>
 
-                {/* Recent Transactions */}
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                    <h2 className="text-lg font-semibold mb-4">Recent Transactions</h2>
-                    <div className="space-y-3">
-                        {recentTxs.map((tx: any) => (
-                            <div key={tx.id} className="flex justify-between items-center py-2 border-b border-gray-800 last:border-0 hover:bg-gray-800/30 px-2 rounded -mx-2">
-                                <div>
-                                    <div className="font-medium text-white">{tx.category_name}</div>
-                                    <div className="text-xs text-gray-500">{formatDisplayDate(tx.date)} • {tx.note || 'No note'}</div>
-                                </div>
-                                <div className={`font-medium ${tx.amount < 0 ? 'text-white' : 'text-emerald-400'}`}>
-                                    {tx.amount < 0 ? '-' : '+'}{formatMoney(Math.abs(tx.amount), tx.currency)}
-                                </div>
-                            </div>
-                        ))}
-                        {recentTxs.length === 0 && <div className="text-gray-500 text-sm">No recent transactions</div>}
+                {/* Right Column (Sidebar) */}
+                <div className="space-y-6">
+                    {/* Account Liquidity */}
+                    <div>
+                        <AccountLiquidityList accounts={accounts} />
+                    </div>
+
+                    {/* Upcoming Payments */}
+                    <div className="h-[400px]">
+                        <UpcomingPaymentsList payments={upcomingPayments} />
                     </div>
                 </div>
             </div>

@@ -1,4 +1,5 @@
 import { run } from '../db/client';
+import { addDays, addWeeks, addMonths, addYears, parseISO, format, isBefore, isAfter } from 'date-fns';
 
 export const StatisticsService = {
     async getDashboardSummary(month: string) {
@@ -231,5 +232,81 @@ export const StatisticsService = {
         const decreased = [...results].sort((a, b) => a.delta - b.delta).filter(i => i.delta < 0).slice(0, 5);
 
         return { increased, decreased };
+    },
+
+    async getCashflowTrend(startDate: string, endDate: string) {
+        return await run(`
+            SELECT 
+                t.date,
+                SUM(CASE WHEN t.amount > 0 THEN t.amount ELSE 0 END) as income,
+                SUM(CASE WHEN t.amount < 0 THEN ABS(t.amount) ELSE 0 END) as expense,
+                SUM(t.amount) as net
+            FROM transactions t
+            WHERE t.date >= ? AND t.date <= ? 
+              AND t.status = 'posted' 
+              AND t.source != 'transfer' 
+              AND t.deleted_at IS NULL
+            GROUP BY t.date
+            ORDER BY t.date ASC
+        `, [startDate, endDate]);
+    },
+
+    async getPendingSummary() {
+        const result = await run(`
+            SELECT 
+                COUNT(*) as count,
+                SUM(ABS(amount)) as total_amount
+            FROM transactions
+            WHERE status = 'pending' AND deleted_at IS NULL
+        `);
+        return {
+            count: result[0]?.count || 0,
+            total_amount: result[0]?.total_amount || 0
+        };
+    },
+
+    async getUpcomingPayments(days: number = 30) {
+        const rules = await run('SELECT * FROM recurring_rules WHERE is_active = 1 AND type = \'expense\'');
+        const today = new Date();
+        const futureLimit = addDays(today, days);
+        const upcoming: any[] = [];
+
+        const getNextDate = (date: Date, frequency: string): Date => {
+            switch (frequency) {
+                case 'daily': return addDays(date, 1);
+                case 'weekly': return addWeeks(date, 1);
+                case 'biweekly': return addWeeks(date, 2);
+                case 'monthly': return addMonths(date, 1);
+                case 'quarterly': return addMonths(date, 3);
+                case 'yearly': return addYears(date, 1);
+                default: return addMonths(date, 1);
+            }
+        };
+
+        for (const rule of rules) {
+            let current = parseISO(rule.start_date);
+            // Advance until >= today (start of day)
+            const startOfToday = new Date(today.setHours(0, 0, 0, 0));
+
+            // Safety break
+            let iterations = 0;
+            while (isBefore(current, startOfToday) && iterations < 1000) {
+                current = getNextDate(current, rule.frequency);
+                iterations++;
+            }
+
+            if (isAfter(current, futureLimit)) continue;
+            if (rule.end_date && isAfter(current, parseISO(rule.end_date))) continue;
+
+            upcoming.push({
+                id: rule.id,
+                name: rule.name,
+                amount: rule.amount,
+                date: format(current, 'yyyy-MM-dd'),
+                category_id: rule.category_id
+            });
+        }
+
+        return upcoming.sort((a, b) => a.date.localeCompare(b.date)).slice(0, 5);
     }
 }

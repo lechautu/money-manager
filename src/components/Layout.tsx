@@ -53,7 +53,7 @@ export function AppLayout() {
             {/* Sidebar (Desktop) */}
             <aside className="hidden w-64 flex-col border-r border-gray-800 bg-gray-900 md:flex">
                 <div className="flex h-16 items-center px-6 border-b border-gray-800">
-                    <span className="text-xl font-bold text-white">Money Mgr</span>
+                    <span className="text-xl font-bold text-white">Money Manager</span>
                 </div>
                 <nav className="flex-1 space-y-1 px-4 py-4 overflow-y-auto">
                     {NAV_ITEMS.map((item) => (

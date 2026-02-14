@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { format } from 'date-fns';
-import { Calculator, Plus, Edit2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Calculator, Plus, Edit2, ChevronDown, ChevronUp, Zap, RefreshCw, Copy, Trash2 } from 'lucide-react';
 import { BudgetService } from '../services/BudgetService';
 import type { Budget } from '../services/BudgetService';
 import { useToast } from '../components/common/Toast';
@@ -14,6 +14,10 @@ export default function BudgetPage() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedBudget, setSelectedBudget] = useState<{ id: string, categoryId: string, subCategoryId: string | null, amount: number } | null>(null);
     const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+    const [syncing, setSyncing] = useState(false);
+    const [cloneSourceMonth, setCloneSourceMonth] = useState('');
+    const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
+    const [selectedBudgetIds, setSelectedBudgetIds] = useState<Set<string>>(new Set());
 
     const { showToast } = useToast();
 
@@ -64,6 +68,94 @@ export default function BudgetPage() {
         setIsModalOpen(true);
     };
 
+    const handleAutoGenerate = async () => {
+        if (!window.confirm('This will automatically create or update budget entries based on your active installments and recurring rules for this month. Continue?')) return;
+
+        setSyncing(true);
+        try {
+            await BudgetService.generateBudgetsFromAutomation(format(currentMonth, 'yyyy-MM'));
+            showToast('Budget generated successfully', 'success');
+            await loadData();
+        } catch (e) {
+            console.error(e);
+            showToast('Failed to generate budget', 'error');
+        } finally {
+            setSyncing(false);
+        }
+    };
+
+    const handleClone = async () => {
+        if (!cloneSourceMonth) return;
+
+        setSyncing(true);
+        try {
+            await BudgetService.cloneMonthBudget(cloneSourceMonth, format(currentMonth, 'yyyy-MM'));
+            showToast('Budget cloned successfully', 'success');
+            setIsCloneModalOpen(false);
+            await loadData();
+        } catch (e) {
+            console.error(e);
+            showToast('Failed to clone budget', 'error');
+        } finally {
+            setSyncing(false);
+        }
+    };
+
+    const handleClearAll = async () => {
+        if (!window.confirm('Are you sure you want to clear ALL budget entries for this month? This action cannot be undone.')) return;
+
+        setLoading(true);
+        try {
+            await BudgetService.clearMonthBudgets(format(currentMonth, 'yyyy-MM'));
+            showToast('All budgets cleared', 'success');
+            await loadData();
+        } catch (e) {
+            console.error(e);
+            showToast('Failed to clear budgets', 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSelect = (id: string) => {
+        setSelectedBudgetIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const handleSelectCategory = (ids: string[]) => {
+        setSelectedBudgetIds(prev => {
+            const next = new Set(prev);
+            const allSelected = ids.every(id => next.has(id));
+            if (allSelected) {
+                ids.forEach(id => next.delete(id));
+            } else {
+                ids.forEach(id => next.add(id));
+            }
+            return next;
+        });
+    };
+
+    const handleBulkDelete = async () => {
+        if (!window.confirm(`Are you sure you want to delete ${selectedBudgetIds.size} budget entries?`)) return;
+
+        setLoading(true);
+        try {
+            await BudgetService.bulkDeleteBudgets(Array.from(selectedBudgetIds));
+            showToast(`${selectedBudgetIds.size} budgets deleted`, 'success');
+            setSelectedBudgetIds(new Set());
+            await loadData();
+        } catch (e) {
+            console.error(e);
+            showToast('Failed to delete budgets', 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const toggleExpand = (catId: string) => {
         setExpandedCategories(prev => {
             const next = new Set(prev);
@@ -100,12 +192,51 @@ export default function BudgetPage() {
 
                 <MonthPicker currentDate={currentMonth} onChange={setCurrentMonth} />
 
-                <button
-                    onClick={handleNew}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-blue-600 rounded-lg text-sm font-bold text-white shadow-lg shadow-blue-900/40 transition-all active:scale-95"
-                >
-                    <Plus size={18} /> New Budget
-                </button>
+                <div className="flex items-center gap-2">
+                    {selectedBudgetIds.size > 0 ? (
+                        <button
+                            onClick={handleBulkDelete}
+                            className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-bold shadow-lg shadow-red-900/40 transition-all active:scale-95 animate-in zoom-in-95 duration-200"
+                        >
+                            <Trash2 size={18} />
+                            Delete ({selectedBudgetIds.size})
+                        </button>
+                    ) : (
+                        <>
+                            <button
+                                onClick={() => setIsCloneModalOpen(true)}
+                                className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm font-bold border border-gray-700 shadow-lg transition-all active:scale-95"
+                            >
+                                <Copy size={18} />
+                                <span className="hidden md:inline">Clone</span>
+                            </button>
+                            <button
+                                onClick={handleAutoGenerate}
+                                disabled={syncing}
+                                className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-emerald-500 rounded-lg text-sm font-bold border border-emerald-500/20 shadow-lg transition-all active:scale-95"
+                                title="Auto-calculate budget from recurring rules and installments"
+                            >
+                                {syncing ? <RefreshCw size={18} className="animate-spin" /> : <Zap size={18} />}
+                                <span className="hidden md:inline">Sync from Automation</span>
+                            </button>
+                            <button
+                                onClick={handleClearAll}
+                                disabled={loading || budgets.length === 0}
+                                className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-red-900/40 text-red-500 rounded-lg text-sm font-bold border border-red-500/20 shadow-lg transition-all active:scale-95 disabled:opacity-50 disabled:grayscale"
+                                title="Delete all budgets for this month"
+                            >
+                                <Trash2 size={18} />
+                                <span className="hidden md:inline">Clear All</span>
+                            </button>
+                        </>
+                    )}
+                    <button
+                        onClick={handleNew}
+                        className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-blue-600 rounded-lg text-sm font-bold text-white shadow-lg shadow-blue-900/40 transition-all active:scale-95"
+                    >
+                        <Plus size={18} /> New Budget
+                    </button>
+                </div>
             </div>
 
             {/* Summary Banner */}
@@ -168,6 +299,20 @@ export default function BudgetPage() {
                                     onClick={() => toggleExpand(group.id)}
                                 >
                                     <div className="flex items-center gap-3">
+                                        <div
+                                            className="p-1 px-2"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleSelectCategory(group.budgets.map(b => b.id));
+                                            }}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                className="rounded bg-gray-800 border-gray-700 text-primary focus:ring-0 cursor-pointer"
+                                                checked={group.budgets.every(b => selectedBudgetIds.has(b.id))}
+                                                onChange={() => { }} // Controlled by onClick on parent for better hit area
+                                            />
+                                        </div>
                                         <div className={`p-1.5 rounded-lg ${isOver ? 'bg-red-500/10 text-red-500' : 'bg-gray-800 text-gray-400'}`}>
                                             {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                                         </div>
@@ -224,7 +369,18 @@ export default function BudgetPage() {
                                 {isExpanded && (
                                     <div className="border-t border-gray-800 bg-gray-900/80 divide-y divide-gray-800/50 animate-in slide-in-from-top-2 duration-300">
                                         {group.budgets.sort((a, b) => (a.sub_category_name || '').localeCompare(b.sub_category_name || '')).map(b => (
-                                            <div key={b.id} className="p-3 pl-12 flex items-center justify-between group/item hover:bg-gray-800/20 transition-colors">
+                                            <div
+                                                key={b.id}
+                                                className={`p-3 pl-12 flex items-center justify-between group/item hover:bg-gray-800/20 transition-colors ${selectedBudgetIds.has(b.id) ? 'bg-primary/5' : ''}`}
+                                            >
+                                                <div className="flex items-center gap-3 mr-4" onClick={(e) => e.stopPropagation()}>
+                                                    <input
+                                                        type="checkbox"
+                                                        className="rounded bg-gray-800 border-gray-700 text-primary focus:ring-0 cursor-pointer"
+                                                        checked={selectedBudgetIds.has(b.id)}
+                                                        onChange={() => handleSelect(b.id)}
+                                                    />
+                                                </div>
                                                 <div className="flex-1">
                                                     <div className="text-sm font-semibold text-gray-300">
                                                         {b.sub_category_name || <span className="italic text-gray-500">Unallocated</span>}
@@ -281,6 +437,48 @@ export default function BudgetPage() {
                 onSaved={loadData}
                 initialData={selectedBudget}
             />
+
+            {/* Clone Modal */}
+            {isCloneModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="p-6 border-b border-gray-800 flex justify-between items-center">
+                            <h2 className="text-xl font-bold text-white">Clone Budget</h2>
+                            <button onClick={() => setIsCloneModalOpen(false)} className="text-gray-500 hover:text-white transition-colors">
+                                <Plus size={24} className="rotate-45" />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <p className="text-sm text-gray-400">Select a month to copy the budget entries from. This will add or update entries in the current month.</p>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Source Month</label>
+                                <input
+                                    type="month"
+                                    value={cloneSourceMonth}
+                                    onChange={(e) => setCloneSourceMonth(e.target.value)}
+                                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                />
+                            </div>
+                        </div>
+                        <div className="p-6 bg-gray-800/30 flex gap-3">
+                            <button
+                                onClick={() => setIsCloneModalOpen(false)}
+                                className="flex-1 py-3 px-4 rounded-xl font-bold text-gray-400 hover:text-white hover:bg-gray-800 transition-all border border-transparent"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleClone}
+                                disabled={!cloneSourceMonth || syncing}
+                                className="flex-1 py-3 px-4 bg-primary hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-primary rounded-xl font-bold text-white shadow-lg shadow-blue-900/40 transition-all flex items-center justify-center gap-2"
+                            >
+                                {syncing ? <RefreshCw size={18} className="animate-spin" /> : <Copy size={18} />}
+                                Clone Budget
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

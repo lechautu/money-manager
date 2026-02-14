@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Dashboard: Consolidated Monthly Performance</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#3B82F6", 
+                        "background-light": "#F3F4F6",
+                        "background-dark": "#0B1120", 
+                        "card-dark": "#151e32", 
+                        "card-dark-lighter": "#1e293b",
+                        "accent-green": "#10B981",
+                        "accent-red": "#EF4444",
+                        "accent-yellow": "#F59E0B",
+                        "accent-purple": "#8B5CF6",
+                        "accent-blue": "#3B82F6",
+                        "text-light": "#1F2937",
+                        "text-dark": "#E5E7EB",
+                        "text-muted": "#9CA3AF"
+                    },
+                    fontFamily: {
+                        sans: ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.5rem",
+                    },
+                },
+            },
+        };
+    </script>
+<style>
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569; 
+        }
+        .chart-container {
+            position: relative; 
+            height: 100%; 
+            width: 100%;
+        }
+        .progress-gradient-bar {
+            background: linear-gradient(90deg, #10B981 0%, #F59E0B 70%, #EF4444 100%);
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark font-sans transition-colors duration-200 min-h-screen p-6 dark">
+<div class="max-w-[1600px] mx-auto space-y-6">
+<header class="mb-8">
+<h1 class="text-2xl font-bold mb-6">Consolidated Monthly Performance</h1>
+</header>
+<h2 class="text-lg font-medium text-text-muted mb-4">Quick Metrics</h2>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<div class="bg-white dark:bg-card-dark rounded-lg p-5 shadow-lg border border-gray-200 dark:border-gray-700/50 flex flex-col justify-between">
+<div class="flex items-center space-x-3 mb-4">
+<div class="flex-shrink-0 w-10 h-10 bg-blue-500/10 dark:bg-blue-500/20 rounded-lg flex items-center justify-center text-blue-600 dark:text-blue-400">
+<span class="material-icons-outlined text-xl">insights</span>
+</div>
+<p class="text-sm font-semibold text-text-light dark:text-white uppercase tracking-wider">Monthly Performance</p>
+</div>
+<div class="grid grid-cols-2 gap-4 mb-4">
+<div>
+<p class="text-xs text-text-muted mb-1">Total Income</p>
+<p class="text-sm font-bold text-emerald-400">₫45,210,500</p>
+</div>
+<div>
+<p class="text-xs text-text-muted mb-1">Total Expense</p>
+<p class="text-sm font-bold text-red-400">₫25,595,118</p>
+</div>
+</div>
+<div class="pt-3 border-t border-gray-700/30">
+<p class="text-xs text-text-muted mb-1">Net Cashflow</p>
+<div class="flex items-baseline space-x-2">
+<span class="text-xl font-bold text-emerald-600 dark:text-emerald-400">+₫19,615,382</span>
+<span class="text-xs bg-emerald-500/10 text-emerald-500 px-1.5 py-0.5 rounded font-medium">+2.4% MoM</span>
+</div>
+</div>
+</div>
+<div class="bg-white dark:bg-card-dark rounded-lg p-5 shadow-lg border border-gray-200 dark:border-gray-700/50 flex items-center space-x-4">
+<div class="flex-shrink-0 w-12 h-12 bg-amber-500/10 dark:bg-amber-500/20 rounded-lg flex items-center justify-center text-amber-600 dark:text-amber-400">
+<span class="material-icons-outlined text-2xl">receipt_long</span>
+</div>
+<div>
+<p class="text-sm font-medium text-text-muted">Pending Summary</p>
+<div class="flex flex-col">
+<span class="text-base font-semibold text-amber-600 dark:text-amber-400">5 Pending</span>
+<span class="text-sm text-text-muted">Total ₫4,500,000</span>
+</div>
+</div>
+</div>
+<div class="bg-white dark:bg-card-dark rounded-lg p-5 shadow-lg border border-gray-200 dark:border-gray-700/50 relative overflow-hidden flex flex-col justify-center">
+<div class="flex items-center space-x-2 mb-3">
+<span class="material-icons-outlined text-primary text-xl">account_balance_wallet</span>
+<h3 class="text-sm font-semibold text-text-light dark:text-white uppercase tracking-wider">Monthly Budget</h3>
+</div>
+<div class="flex flex-col space-y-3">
+<div class="flex justify-between items-end">
+<div>
+<span class="text-3xl font-bold text-white leading-none">80%</span>
+<span class="text-sm font-medium text-text-muted ml-1">USED</span>
+</div>
+<div class="text-right">
+<div class="text-sm text-emerald-400 font-bold">₫3,000,000</div>
+<div class="text-xs text-text-muted">remaining of ₫15,000,000</div>
+</div>
+</div>
+<div class="w-full bg-gray-800 rounded-full h-4 relative overflow-hidden shadow-inner">
+<div class="progress-gradient-bar h-full rounded-full transition-all duration-500 ease-out" style="width: 80%"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<div class="bg-white dark:bg-card-dark rounded-lg p-6 shadow-lg border border-gray-200 dark:border-gray-700/50">
+<div class="flex justify-between items-center mb-6">
+<h3 class="text-lg font-semibold">Cashflow Trend (Last 30 Days)</h3>
+<div class="flex space-x-4 text-xs">
+<div class="flex items-center"><span class="w-3 h-1 bg-emerald-500 rounded-full mr-2"></span> Income</div>
+<div class="flex items-center"><span class="w-3 h-1 bg-red-500 rounded-full mr-2"></span> Expense</div>
+<div class="flex items-center"><span class="w-3 h-1 bg-blue-500 rounded-full mr-2"></span> Net</div>
+</div>
+</div>
+<div class="h-64 relative w-full">
+<canvas id="cashflowChart"></canvas>
+</div>
+</div>
+<div class="bg-white dark:bg-card-dark rounded-lg p-6 shadow-lg border border-gray-200 dark:border-gray-700/50 flex flex-col">
+<div class="mb-4">
+<h3 class="text-lg font-semibold mb-3">Upcoming Payments (Next 30 Days)</h3>
+</div>
+<div class="flex-1 overflow-y-auto space-y-3 pr-2 max-h-[300px]">
+<div class="p-3 bg-gray-50 dark:bg-card-dark-lighter rounded border border-gray-200 dark:border-gray-700 flex items-center justify-between">
+<div class="flex items-center space-x-3">
+<span class="material-icons-outlined text-rose-500">home</span>
+<div>
+<span class="text-sm font-bold text-text-light dark:text-white">Mar 3:</span>
+<span class="text-sm text-text-muted">Rent</span>
+<span class="text-sm text-text-muted ml-1">(₫7,000,000)</span>
+</div>
+</div>
+<div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+</div>
+<div class="p-3 bg-gray-50 dark:bg-card-dark-lighter rounded border border-gray-200 dark:border-gray-700 flex items-center justify-between">
+<div class="flex items-center space-x-3">
+<span class="material-icons-outlined text-amber-500">bolt</span>
+<div>
+<span class="text-sm font-bold text-text-light dark:text-white">Mar 5:</span>
+<span class="text-sm text-text-muted">Utilities</span>
+<span class="text-sm text-text-muted ml-1">(₫1,200,000)</span>
+</div>
+</div>
+<div class="w-2 h-2 rounded-full bg-amber-500"></div>
+</div>
+<div class="p-3 bg-gray-50 dark:bg-card-dark-lighter rounded border border-gray-200 dark:border-gray-700 flex items-center justify-between">
+<div class="flex items-center space-x-3">
+<span class="material-icons-outlined text-blue-500">verified_user</span>
+<div>
+<span class="text-sm font-bold text-text-light dark:text-white">Mar 10:</span>
+<span class="text-sm text-text-muted">Insurance</span>
+<span class="text-sm text-text-muted ml-1">(₫2,500,000)</span>
+</div>
+</div>
+<div class="w-2 h-2 rounded-full bg-red-500"></div>
+</div>
+<div class="p-3 bg-gray-50 dark:bg-card-dark-lighter rounded border border-gray-200 dark:border-gray-700 flex items-center justify-between">
+<div class="flex items-center space-x-3">
+<span class="material-icons-outlined text-purple-500">school</span>
+<div>
+<span class="text-sm font-bold text-text-light dark:text-white">Mar 15:</span>
+<span class="text-sm text-text-muted">Tuition Fee</span>
+<span class="text-sm text-text-muted ml-1">(₫5,000,000)</span>
+</div>
+</div>
+<div class="w-2 h-2 rounded-full bg-gray-500"></div>
+</div>
+<div class="p-3 bg-gray-50 dark:bg-card-dark-lighter rounded border border-gray-200 dark:border-gray-700 flex items-center justify-between">
+<div class="flex items-center space-x-3">
+<span class="material-icons-outlined text-cyan-500">wifi</span>
+<div>
+<span class="text-sm font-bold text-text-light dark:text-white">Mar 22:</span>
+<span class="text-sm text-text-muted">Internet</span>
+<span class="text-sm text-text-muted ml-1">(₫350,000)</span>
+</div>
+</div>
+<div class="w-2 h-2 rounded-full bg-gray-500"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<div class="bg-white dark:bg-card-dark rounded-lg p-6 shadow-lg border border-gray-200 dark:border-gray-700/50 flex flex-col md:flex-row items-center md:items-start gap-8">
+<div class="w-full md:w-1/3 flex flex-col items-center justify-center">
+<h3 class="text-lg font-semibold w-full text-left mb-4 md:mb-0 md:absolute md:top-6 md:left-6">Expense Structure</h3>
+<div class="w-40 h-40 relative mt-8 md:mt-12">
+<canvas id="expenseDoughnut"></canvas>
+<div class="absolute inset-0 rounded-full border-[1.5rem] border-transparent pointer-events-none"></div>
+</div>
+</div>
+<div class="w-full md:w-2/3 space-y-4 pt-4 md:pt-10">
+<div class="flex flex-col border-b border-gray-700/30 pb-3 last:border-0 last:pb-0">
+<div class="flex justify-between items-center text-sm">
+<div class="flex items-center">
+<span class="w-3 h-3 rounded-full bg-blue-500 mr-3"></span>
+<span class="text-gray-200 font-medium">Leisure (45%)</span>
+</div>
+</div>
+</div>
+<div class="flex flex-col border-b border-gray-700/30 pb-3 last:border-0 last:pb-0">
+<div class="flex justify-between items-center text-sm">
+<div class="flex items-center">
+<span class="w-3 h-3 rounded-full bg-emerald-500 mr-3"></span>
+<span class="text-gray-200 font-medium">Food (20%)</span>
+</div>
+</div>
+</div>
+<div class="flex flex-col border-b border-gray-700/30 pb-3 last:border-0 last:pb-0">
+<div class="flex justify-between items-center text-sm">
+<div class="flex items-center">
+<span class="w-3 h-3 rounded-full bg-amber-500 mr-3"></span>
+<span class="text-gray-200 font-medium">Transport (15%)</span>
+</div>
+</div>
+</div>
+<div class="flex flex-col border-b border-gray-700/30 pb-3 last:border-0 last:pb-0">
+<div class="flex justify-between items-center text-sm">
+<div class="flex items-center">
+<span class="w-3 h-3 rounded-full bg-purple-500 mr-3"></span>
+<span class="text-gray-200 font-medium">Utilities (10%)</span>
+</div>
+</div>
+</div>
+<div class="flex flex-col border-b border-gray-700/30 pb-3 last:border-0 last:pb-0">
+<div class="flex justify-between items-center text-sm">
+<div class="flex items-center">
+<span class="w-3 h-3 rounded-full bg-indigo-500 mr-3"></span>
+<span class="text-gray-200 font-medium">Others (10%)</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="bg-white dark:bg-card-dark rounded-lg p-6 shadow-lg border border-gray-200 dark:border-gray-700/50 flex flex-col h-full">
+<div class="flex justify-between items-center mb-6">
+<h3 class="text-lg font-semibold text-text-light dark:text-white">Account Liquidity</h3>
+<span class="material-icons-outlined text-gray-500">account_balance</span>
+</div>
+<div class="flex-1 flex flex-col justify-center space-y-4">
+<div class="group relative overflow-hidden rounded-lg bg-card-dark-lighter border border-gray-700 p-4 transition-all hover:border-gray-600">
+<div class="flex items-center justify-between">
+<div>
+<p class="text-xs font-medium text-text-muted uppercase tracking-wider mb-1">Main Checking</p>
+<p class="text-lg font-bold text-white">VCB **** 1234</p>
+</div>
+<div class="text-right">
+<p class="text-xs font-medium text-text-muted mb-1">Effective Balance</p>
+<p class="text-xl font-bold text-emerald-400">₫125,500,000</p>
+</div>
+</div>
+</div>
+<div class="group relative overflow-hidden rounded-lg bg-card-dark-lighter border border-gray-700 p-4 transition-all hover:border-gray-600">
+<div class="flex items-center justify-between">
+<div>
+<p class="text-xs font-medium text-text-muted uppercase tracking-wider mb-1">Savings</p>
+<p class="text-lg font-bold text-white">High Yield Tech</p>
+</div>
+<div class="text-right">
+<p class="text-xs font-medium text-text-muted mb-1">Effective Balance</p>
+<p class="text-xl font-bold text-blue-400">₫350,000,000</p>
+</div>
+</div>
+</div>
+<div class="group relative overflow-hidden rounded-lg bg-card-dark-lighter border border-gray-700 p-4 transition-all hover:border-gray-600">
+<div class="flex items-center justify-between">
+<div>
+<p class="text-xs font-medium text-text-muted uppercase tracking-wider mb-1">Investment Cash</p>
+<p class="text-lg font-bold text-white">Brokerage Acc</p>
+</div>
+<div class="text-right">
+<p class="text-xs font-medium text-text-muted mb-1">Effective Balance</p>
+<p class="text-xl font-bold text-purple-400">₫45,200,000</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+        // Cashflow Chart
+        const ctxLine = document.getElementById('cashflowChart').getContext('2d');
+        const gradientIncome = ctxLine.createLinearGradient(0, 0, 0, 400);
+        gradientIncome.addColorStop(0, 'rgba(16, 185, 129, 0.2)');
+        gradientIncome.addColorStop(1, 'rgba(16, 185, 129, 0)');
+        const cashflowChart = new Chart(ctxLine, {
+            type: 'line',
+            data: {
+                labels: ['Mar 1', 'Mar 4', 'Mar 7', 'Mar 10', 'Mar 13', 'Mar 16', 'Mar 21', 'Mar 30'],
+                datasets: [
+                    {
+                        label: 'Income',
+                        data: [2000000, 2500000, 7500000, 2200000, 2800000, 3100000, 8000000, 4000000],
+                        borderColor: '#10B981',
+                        backgroundColor: gradientIncome,
+                        borderWidth: 2,
+                        tension: 0.4,
+                        pointRadius: 3,
+                        fill: true
+                    },
+                    {
+                        label: 'Expense',
+                        data: [-500000, -800000, -2000000, -500000, -900000, -1200000, -2500000, -1000000],
+                        borderColor: '#EF4444',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        pointRadius: 3,
+                        borderDash: [0, 0]
+                    },
+                    {
+                        label: 'Net',
+                        data: [1500000, 1700000, 5500000, 1700000, 1900000, 1900000, 5500000, 3000000],
+                        borderColor: '#3B82F6',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        pointRadius: 3
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        grid: { color: '#374151', tickLength: 5 },
+                        ticks: { 
+                            color: '#9CA3AF', 
+                            font: { size: 10 },
+                            callback: function(value) {
+                                return '₫' + (value/1000000) + 'M';
+                            }
+                        }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#9CA3AF', font: { size: 10 } }
+                    }
+                }
+            }
+        });
+        // Expense Doughnut Chart
+        const ctxDoughnut = document.getElementById('expenseDoughnut').getContext('2d');
+        const expenseDoughnut = new Chart(ctxDoughnut, {
+            type: 'doughnut',
+            data: {
+                labels: ['Leisure', 'Food', 'Transport', 'Utilities', 'Others'],
+                datasets: [{
+                    data: [45, 20, 15, 10, 10],
+                    backgroundColor: [
+                        '#3B82F6', // Blue
+                        '#10B981', // Emerald
+                        '#F59E0B', // Amber
+                        '#8B5CF6', // Purple
+                        '#6366F1'  // Indigo
+                    ],
+                    borderWidth: 0,
+                    hoverOffset: 4
+                }]
+            },
+            options: {
+                cutout: '65%',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                }
+            }
+        });
+    </script>
+
+</body></html>
