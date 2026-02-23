@@ -9,6 +9,7 @@ import InstallmentPage from './pages/InstallmentPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import BudgetPage from './pages/BudgetPage';
 import ForecastPage from './pages/ForecastPage';
+import ForecastDetailPage from './pages/ForecastDetailPage';
 import CategoryPage from './pages/CategoryPage';
 import AuditLogPage from './pages/AuditLogPage';
 
@@ -37,6 +38,7 @@ function App() {
                   <Route path="/analytics" element={<AnalyticsPage />} />
                   <Route path="/budget" element={<BudgetPage />} />
                   <Route path="/forecast" element={<ForecastPage />} />
+                  <Route path="/forecast/:month" element={<ForecastDetailPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/audit-logs" element={<AuditLogPage />} />
                 </Route>

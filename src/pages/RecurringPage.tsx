@@ -157,7 +157,7 @@ export default function RecurringPage() {
                                         className={`flex items-center gap-1 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded mt-1 transition-colors ${rule.auto_add === 1 ? 'bg-primary/20 text-primary hover:bg-primary/30' : 'bg-gray-800 text-gray-500 hover:bg-gray-700'}`}
                                     >
                                         {rule.auto_add === 1 ? <Zap size={10} /> : <Hand size={10} />}
-                                        {rule.auto_add === 1 ? 'Auto Add' : 'Manual'}
+                                        {rule.auto_add === 1 ? 'Auto-Add' : 'Manual'}
                                     </button>
                                 </div>
                                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

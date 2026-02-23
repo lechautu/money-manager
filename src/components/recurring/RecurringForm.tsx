@@ -194,21 +194,21 @@ export function RecurringForm({ isOpen, onClose, initialData, onSuccess }: Recur
                         <button
                             type="button"
                             onClick={() => setType('expense')}
-                            className={`flex-1 text-sm py-1 rounded ${type === 'expense' ? 'bg-red-500/20 text-red-500' : 'text-gray-400'}`}
+                            className={`flex-1 text-sm py-1 rounded transition-colors ${type === 'expense' ? 'bg-red-500/20 text-red-500' : 'text-gray-400 hover:bg-gray-700'}`}
                         >
                             Expense
                         </button>
                         <button
                             type="button"
                             onClick={() => setType('income')}
-                            className={`flex-1 text-sm py-1 rounded ${type === 'income' ? 'bg-emerald-500/20 text-emerald-500' : 'text-gray-400'}`}
+                            className={`flex-1 text-sm py-1 rounded transition-colors ${type === 'income' ? 'bg-emerald-500/20 text-emerald-500' : 'text-gray-400 hover:bg-gray-700'}`}
                         >
                             Income
                         </button>
                         <button
                             type="button"
                             onClick={() => setType('transfer')}
-                            className={`flex-1 text-sm py-1 rounded ${type === 'transfer' ? 'bg-blue-500/20 text-blue-500' : 'text-gray-400'}`}
+                            className={`flex-1 text-sm py-1 rounded transition-colors ${type === 'transfer' ? 'bg-blue-500/20 text-blue-500' : 'text-gray-400 hover:bg-gray-700'}`}
                         >
                             Transfer
                         </button>
@@ -376,14 +376,14 @@ export function RecurringForm({ isOpen, onClose, initialData, onSuccess }: Recur
                         <button
                             type="button"
                             onClick={() => setAutoAdd(true)}
-                            className={`flex-1 text-sm py-1 rounded ${autoAdd ? 'bg-primary/20 text-primary' : 'text-gray-400'}`}
+                            className={`flex-1 text-sm py-1 rounded transition-colors ${autoAdd ? 'bg-emerald-500/20 text-emerald-500' : 'text-gray-400 hover:bg-gray-700'}`}
                         >
-                            Auto Add
+                            Auto-Add
                         </button>
                         <button
                             type="button"
                             onClick={() => setAutoAdd(false)}
-                            className={`flex-1 text-sm py-1 rounded ${!autoAdd ? 'bg-orange-500/20 text-orange-500' : 'text-gray-400'}`}
+                            className={`flex-1 text-sm py-1 rounded transition-colors ${!autoAdd ? 'bg-orange-500/20 text-orange-500' : 'text-gray-400 hover:bg-gray-700'}`}
                         >
                             Manual
                         </button>
@@ -399,14 +399,14 @@ export function RecurringForm({ isOpen, onClose, initialData, onSuccess }: Recur
                         <button
                             type="button"
                             onClick={() => setDefaultStatus('pending')}
-                            className={`flex-1 text-sm py-1 rounded ${defaultStatus === 'pending' ? 'bg-yellow-500/20 text-yellow-500' : 'text-gray-400'}`}
+                            className={`flex-1 text-sm py-1 rounded transition-colors ${defaultStatus === 'pending' ? 'bg-yellow-500/20 text-yellow-500' : 'text-gray-400 hover:bg-gray-700'}`}
                         >
                             Pending
                         </button>
                         <button
                             type="button"
                             onClick={() => setDefaultStatus('posted')}
-                            className={`flex-1 text-sm py-1 rounded ${defaultStatus === 'posted' ? 'bg-emerald-500/20 text-emerald-500' : 'text-gray-400'}`}
+                            className={`flex-1 text-sm py-1 rounded transition-colors ${defaultStatus === 'posted' ? 'bg-emerald-500/20 text-emerald-500' : 'text-gray-400 hover:bg-gray-700'}`}
                         >
                             Posted
                         </button>
