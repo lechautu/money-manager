@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { TransactionForm } from './transactions/TransactionForm';
 import { twMerge } from 'tailwind-merge';
+import { ToolDebugPanel } from './ui/ToolDebugPanel';
 
 const NAV_ITEMS = [
     { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -93,6 +94,9 @@ export function AppLayout() {
                     window.location.reload();
                 }}
             />
+
+            {/* Debug Panel for AI Tools */}
+            <ToolDebugPanel />
         </div>
     );
 }
