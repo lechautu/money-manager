@@ -302,9 +302,9 @@ export default function TrendsPage() {
                     </div>
 
                     {/* Chart Section */}
-                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 h-[300px]">
+                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 h-[300px] min-h-0 min-w-0 relative">
                         <h3 className="text-sm font-semibold text-gray-400 mb-4 capitalize">{metric} Trend</h3>
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="99%" height={230}>
                             <BarChart data={trendsData}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
                                 <XAxis dataKey="month" stroke="#9CA3AF" fontSize={10} tickFormatter={(val) => formatShortMonthYear(val)} tickLine={false} axisLine={false} />

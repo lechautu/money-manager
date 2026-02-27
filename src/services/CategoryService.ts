@@ -1,5 +1,4 @@
-import { run } from '../db/client';
-import { v4 as uuidv4 } from 'uuid';
+import { ToolExecutionService } from './ToolExecutionService';
 
 export interface Category {
     id: string;
@@ -22,88 +21,47 @@ export interface SubCategory {
 
 export const CategoryService = {
     async getAll(): Promise<Category[]> {
-        return await run('SELECT * FROM categories ORDER BY sort_order, name');
+        const res = await ToolExecutionService.executeTool('get_categories', {});
+        return res.data.main;
     },
 
     async getSubCategories(categoryId: string): Promise<SubCategory[]> {
-        return await run('SELECT * FROM sub_categories WHERE category_id = ? ORDER BY sort_order, name', [categoryId]);
+        const all = await this.getAllSubCategories();
+        return all.filter(s => s.category_id === categoryId);
     },
 
     async getAllSubCategories(): Promise<SubCategory[]> {
-        return await run('SELECT * FROM sub_categories ORDER BY sort_order, name');
+        const res = await ToolExecutionService.executeTool('get_categories', {});
+        return res.data.sub;
     },
 
     async createCategory(name: string): Promise<Category> {
-        const id = uuidv4();
-        const now = new Date().toISOString();
-        const category: Category = { id, name, sort_order: 0, is_archived: 0, created_at: now, updated_at: now };
-        await run(
-            'INSERT INTO categories (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)',
-            [id, name, now, now]
-        );
-        return category;
+        const res = await ToolExecutionService.executeTool('create_category', { name });
+        return res.data;
     },
 
     async createSubCategory(categoryId: string, name: string): Promise<SubCategory> {
-        const id = uuidv4();
-        const now = new Date().toISOString();
-        const subCategory: SubCategory = {
-            id, category_id: categoryId, name, sort_order: 0, is_archived: 0, created_at: now, updated_at: now
-        };
-        await run(
-            'INSERT INTO sub_categories (id, category_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-            [id, categoryId, name, now, now]
-        );
-        return subCategory;
+        const res = await ToolExecutionService.executeTool('create_subcategory', { categoryId, name });
+        return res.data;
     },
 
     async updateCategory(id: string, name: string): Promise<void> {
-        const now = new Date().toISOString();
-        await run('UPDATE categories SET name = ?, updated_at = ? WHERE id = ?', [name, now, id]);
+        await ToolExecutionService.executeTool('update_category', { id, name });
     },
 
     async updateSubCategory(id: string, name: string): Promise<void> {
-        const now = new Date().toISOString();
-        await run('UPDATE sub_categories SET name = ?, updated_at = ? WHERE id = ?', [name, now, id]);
+        await ToolExecutionService.executeTool('update_subcategory', { id, name });
     },
 
     async moveSubCategory(subCategoryId: string, newCategoryId: string): Promise<void> {
-        const now = new Date().toISOString();
-        // 1. Update sub_categories
-        await run('UPDATE sub_categories SET category_id = ?, updated_at = ? WHERE id = ?', [newCategoryId, now, subCategoryId]);
-
-        // 2. Update transactions
-        await run('UPDATE transactions SET category_id = ?, updated_at = ? WHERE sub_category_id = ?', [newCategoryId, now, subCategoryId]);
-
-        // 3. Update transaction_splits
-        await run('UPDATE transaction_splits SET category_id = ? WHERE sub_category_id = ?', [newCategoryId, subCategoryId]);
-
-        // 4. Update recurring_rules
-        await run('UPDATE recurring_rules SET category_id = ?, updated_at = ? WHERE sub_category_id = ?', [newCategoryId, now, subCategoryId]);
-
-        // 5. Update installment_plans
-        await run('UPDATE installment_plans SET payment_category_id = ?, updated_at = ? WHERE payment_sub_category_id = ?', [newCategoryId, now, subCategoryId]);
+        await ToolExecutionService.executeTool('move_subcategory', { subCategoryId, newCategoryId });
     },
 
     async deleteCategory(id: string): Promise<void> {
-        try {
-            await run('DELETE FROM categories WHERE id = ?', [id]);
-        } catch (error: any) {
-            if (error.message && error.message.includes('FOREIGN KEY constraint failed')) {
-                throw new Error('Cannot delete category because it is being used by transactions, rules, or has sub-categories.');
-            }
-            throw error;
-        }
+        await ToolExecutionService.executeTool('delete_category', { id });
     },
 
     async deleteSubCategory(id: string): Promise<void> {
-        try {
-            await run('DELETE FROM sub_categories WHERE id = ?', [id]);
-        } catch (error: any) {
-            if (error.message && error.message.includes('FOREIGN KEY constraint failed')) {
-                throw new Error('Cannot delete sub-category because it is being used by transactions or rules.');
-            }
-            throw error;
-        }
+        await ToolExecutionService.executeTool('delete_subcategory', { id });
     }
 };

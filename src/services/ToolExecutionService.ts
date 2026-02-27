@@ -1,28 +1,48 @@
-import { AccountService } from './AccountService';
-import { TransactionService } from './TransactionService';
-import { CategoryService } from './CategoryService';
-import { BudgetService } from './BudgetService';
+import { LocalAccountService } from './local/AccountService';
+import { LocalSettingsService } from './local/SettingsService';
+import { LocalCategoryService } from './local/CategoryService';
+import { LocalStatisticsService } from './local/StatisticsService';
+import { LocalTransactionService } from './local/TransactionService';
+import { LocalBudgetService } from './local/BudgetService';
 import { RecurringService } from './RecurringService';
 import { InstallmentService } from './InstallmentService';
-import { StatisticsService } from './StatisticsService';
 import { ForecastService } from './ForecastService';
-import { SettingsService } from './SettingsService';
 import { AuditService } from './AuditService';
 import { ImportExportService } from './ImportExportService';
+import { GatewayClient } from '../api/gateway';
+import type { GatewayConfig } from '../api/gateway';
 import toolsManifest from '../../instruct/05-AI-Tools/tools_manifest_v1.json';
 
 type Tier = 0 | 1 | 2;
+
+export interface ToolExecutionOptions {
+    remoteConfig?: GatewayConfig;
+}
 
 export const ToolExecutionService = {
     getToolInfo(name: string) {
         return toolsManifest.tools.find(t => t.name === name);
     },
 
-    async executeTool(name: string, parameters: any): Promise<any> {
+    async executeTool(name: string, parameters: any, options: ToolExecutionOptions = {}): Promise<any> {
         const toolInfo = this.getToolInfo(name);
 
         if (!toolInfo) {
             throw new Error(`Tool '${name}' is not found in the manifest.`);
+        }
+
+        // Global override for "Remote-Only" Mode (Migration result)
+        if (!options.remoteConfig && localStorage.getItem('mm2_use_gateway') === 'true') {
+            options.remoteConfig = {
+                baseUrl: localStorage.getItem('mm2_gateway_url') || 'http://localhost:3200',
+                authToken: localStorage.getItem('mm2_gateway_token') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzEyMyIsImlhdCI6MTc3MjE2NTk3NywiZXhwIjoxNzcyMjUyMzc3fQ.2cr4NLf1I85g-WERa4y_ziG_84sKDaclgQgkZDAQm9U',
+                approvalToken: 'approved'
+            };
+        }
+
+        // If remote config is provided, proxy to Gateway
+        if (options.remoteConfig) {
+            return await GatewayClient.callTool(name, parameters, options.remoteConfig);
         }
 
         const tier = toolInfo.tier as Tier;
@@ -41,63 +61,63 @@ export const ToolExecutionService = {
             switch (name) {
                 // ACCOUNTS
                 case 'get_accounts':
-                    result = await AccountService.getAll();
+                    result = await LocalAccountService.getAll();
                     break;
                 case 'create_account':
-                    result = await AccountService.create(parameters);
+                    result = await LocalAccountService.create(parameters);
                     break;
                 case 'update_account':
                     const { id: accId, ...accData } = parameters;
-                    await AccountService.update(accId, accData);
+                    await LocalAccountService.update(accId, accData);
                     result = { success: true };
                     break;
                 case 'delete_account':
-                    await AccountService.delete(parameters.id);
+                    await LocalAccountService.delete(parameters.id);
                     result = { success: true };
                     break;
                 case 'get_account_balances':
-                    result = await TransactionService.getBalances();
+                    result = await LocalTransactionService.getBalances();
                     break;
 
                 // CATEGORIES
                 case 'get_categories':
-                    const mainCats = await CategoryService.getAll();
-                    const subCats = await CategoryService.getAllSubCategories();
+                    const mainCats = await LocalCategoryService.getAll();
+                    const subCats = await LocalCategoryService.getAllSubCategories();
                     result = { main: mainCats, sub: subCats };
                     break;
                 case 'create_category':
-                    result = await CategoryService.createCategory(parameters.name);
+                    result = await LocalCategoryService.createCategory(parameters.name);
                     break;
                 case 'create_subcategory':
-                    result = await CategoryService.createSubCategory(parameters.categoryId, parameters.name);
+                    result = await LocalCategoryService.createSubCategory(parameters.categoryId, parameters.name);
                     break;
                 case 'update_category':
-                    await CategoryService.updateCategory(parameters.id, parameters.name);
+                    await LocalCategoryService.updateCategory(parameters.id, parameters.name);
                     result = { success: true };
                     break;
                 case 'update_subcategory':
-                    await CategoryService.updateSubCategory(parameters.id, parameters.name);
+                    await LocalCategoryService.updateSubCategory(parameters.id, parameters.name);
                     result = { success: true };
                     break;
                 case 'move_subcategory':
-                    await CategoryService.moveSubCategory(parameters.subCategoryId, parameters.newCategoryId);
+                    await LocalCategoryService.moveSubCategory(parameters.subCategoryId, parameters.newCategoryId);
                     result = { success: true };
                     break;
                 case 'delete_category':
-                    await CategoryService.deleteCategory(parameters.id);
+                    await LocalCategoryService.deleteCategory(parameters.id);
                     result = { success: true };
                     break;
                 case 'delete_subcategory':
-                    await CategoryService.deleteSubCategory(parameters.id);
+                    await LocalCategoryService.deleteSubCategory(parameters.id);
                     result = { success: true };
                     break;
 
                 // TRANSACTIONS
                 case 'record_transaction':
-                    result = await TransactionService.create(parameters);
+                    result = await LocalTransactionService.create(parameters);
                     break;
                 case 'transfer_funds':
-                    result = await TransactionService.transfer(
+                    result = await LocalTransactionService.transfer(
                         parameters.fromAccountId,
                         parameters.toAccountId,
                         parameters.amount,
@@ -108,31 +128,31 @@ export const ToolExecutionService = {
                     );
                     break;
                 case 'search_transactions':
-                    result = await TransactionService.getAll(parameters);
+                    result = await LocalTransactionService.getAll(parameters);
                     break;
                 case 'update_transaction_status':
-                    await TransactionService.update(parameters.id, { status: parameters.status });
+                    await LocalTransactionService.update(parameters.id, { status: parameters.status });
                     result = { success: true };
                     break;
                 case 'update_transaction':
                     const { id: txId, ...txData } = parameters;
-                    await TransactionService.update(txId, txData);
+                    await LocalTransactionService.update(txId, txData);
                     result = { success: true };
                     break;
                 case 'delete_transaction':
-                    await TransactionService.delete(parameters.id);
+                    await LocalTransactionService.delete(parameters.id);
                     result = { success: true };
                     break;
                 case 'bulk_delete_transactions':
-                    await TransactionService.bulkDelete(parameters.ids);
+                    await LocalTransactionService.bulkDelete(parameters.ids);
                     result = { success: true };
                     break;
                 case 'restore_transaction':
-                    await TransactionService.restore(parameters.id);
+                    await LocalTransactionService.restore(parameters.id);
                     result = { success: true };
                     break;
                 case 'bulk_restore_transactions':
-                    await TransactionService.bulkRestore(parameters.ids);
+                    await LocalTransactionService.bulkRestore(parameters.ids);
                     result = { success: true };
                     break;
 
@@ -189,56 +209,56 @@ export const ToolExecutionService = {
 
                 // BUDGET
                 case 'get_budgets':
-                    result = await BudgetService.getBudgetsForMonth(parameters.month);
+                    result = await LocalBudgetService.getBudgetsForMonth(parameters.month);
                     break;
                 case 'set_category_budget':
-                    await BudgetService.setBudget(parameters.month, parameters.categoryId, parameters.subCategoryId || null, parameters.amount, parameters.id);
+                    await LocalBudgetService.setBudget(parameters.month, parameters.categoryId, parameters.subCategoryId || null, parameters.amount, parameters.id);
                     result = { success: true };
                     break;
                 case 'delete_budget':
-                    await BudgetService.deleteBudget(parameters.id);
+                    await LocalBudgetService.deleteBudget(parameters.id);
                     result = { success: true };
                     break;
                 case 'clear_month_budgets':
-                    await BudgetService.clearMonthBudgets(parameters.month);
+                    await LocalBudgetService.clearMonthBudgets(parameters.month);
                     result = { success: true };
                     break;
                 case 'clone_month_budget':
-                    await BudgetService.cloneMonthBudget(parameters.sourceMonth, parameters.targetMonth);
+                    await LocalBudgetService.cloneMonthBudget(parameters.sourceMonth, parameters.targetMonth);
                     result = { success: true };
                     break;
                 case 'generate_budgets_from_automation':
-                    await BudgetService.generateBudgetsFromAutomation(parameters.month);
+                    await LocalBudgetService.generateBudgetsFromAutomation(parameters.month);
                     result = { success: true };
                     break;
 
                 // ANALYTICS & STATS
                 case 'get_dashboard_summary':
-                    result = await StatisticsService.getDashboardSummary(parameters.month);
+                    result = await LocalStatisticsService.getDashboardSummary(parameters.month);
                     break;
                 case 'get_spending_analytics':
-                    result = await StatisticsService.getExpenseByCategory(parameters.month);
+                    result = await LocalStatisticsService.getExpenseByCategory(parameters.month);
                     break;
                 case 'get_cashflow_trend':
-                    result = await StatisticsService.getCashflowTrend(parameters.startDate, parameters.endDate);
+                    result = await LocalStatisticsService.getCashflowTrend(parameters.startDate, parameters.endDate);
                     break;
                 case 'get_daily_spending':
-                    result = await StatisticsService.getDailySpending(parameters.month);
+                    result = await LocalStatisticsService.getDailySpending(parameters.month);
                     break;
                 case 'get_category_movers':
-                    result = await StatisticsService.getCategoryMovers(
+                    result = await LocalStatisticsService.getCategoryMovers(
                         parameters.currentStart, parameters.currentEnd,
                         parameters.compareStart, parameters.compareEnd
                     );
                     break;
                 case 'get_pending_summary':
-                    result = await StatisticsService.getPendingSummary();
+                    result = await LocalStatisticsService.getPendingSummary();
                     break;
                 case 'get_upcoming_payments':
-                    result = await StatisticsService.getUpcomingPayments(parameters.days);
+                    result = await LocalStatisticsService.getUpcomingPayments(parameters.days);
                     break;
                 case 'get_monthly_summary':
-                    result = await BudgetService.getMonthSummary(parameters.month);
+                    result = await LocalBudgetService.getMonthSummary(parameters.month);
                     break;
 
                 // FORECAST
@@ -259,18 +279,18 @@ export const ToolExecutionService = {
                 case 'import_system_data':
                     throw new Error("Dữ liệu nhập quá lớn để gọi qua API tự động. Vui lòng import qua file JSON trên UI.");
                 case 'get_settings':
-                    result = await SettingsService.getSettings();
+                    result = await LocalSettingsService.getSettings();
                     break;
                 case 'set_date_format':
-                    await SettingsService.setDateFormat(parameters.format);
+                    await LocalSettingsService.setDateFormat(parameters.format);
                     result = { success: true };
                     break;
                 case 'has_password':
-                    const hasPwd = await SettingsService.hasPassword();
+                    const hasPwd = await LocalSettingsService.hasPassword();
                     result = { hasPassword: hasPwd };
                     break;
                 case 'set_lock_enabled':
-                    await SettingsService.setLockEnabled(parameters.enabled);
+                    await LocalSettingsService.setLockEnabled(parameters.enabled);
                     result = { success: true };
                     break;
 

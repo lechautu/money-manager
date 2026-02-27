@@ -135,9 +135,9 @@ export function DashboardPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Main Content Layout (Sidebar on right for desktop) */}
-                <div className="lg:col-span-2 space-y-6">
+                <div className="lg:col-span-2 space-y-6 min-w-0">
                     {/* Cashflow Trend */}
-                    <div className="h-[400px]">
+                    <div className="h-[400px] min-w-0">
                         <CashflowTrendChart data={cashflowTrend} />
                     </div>
 
@@ -146,8 +146,8 @@ export function DashboardPage() {
                         <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6">Expense Structure</h3>
                         <div className="flex flex-col md:flex-row items-center gap-8">
                             {/* Pie Chart */}
-                            <div className="w-full md:w-1/2 h-[300px] flex items-center justify-center relative">
-                                <ResponsiveContainer width="100%" height="100%">
+                            <div className="w-full md:w-1/2 h-[300px]">
+                                <ResponsiveContainer width="99%" height={300}>
                                     <PieChart>
                                         <Pie
                                             data={topExpenses}

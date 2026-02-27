@@ -1,6 +1,4 @@
-
-import { run } from '../db/client';
-import { v4 as uuidv4 } from 'uuid';
+import { ToolExecutionService } from './ToolExecutionService';
 
 export interface AuditLog {
     id: string;
@@ -12,22 +10,13 @@ export interface AuditLog {
 }
 
 export const AuditService = {
-    async log(action: string, entityType: string, entityId?: string, details?: any) {
-        const id = uuidv4();
-        const createdAt = new Date().toISOString();
-        const detailsStr = details ? JSON.stringify(details) : undefined;
-
-        await run(`
-            INSERT INTO audit_logs (id, action, entity_type, entity_id, details, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-        `, [id, action, entityType, entityId, detailsStr, createdAt]);
+    async log(_action: string, _entityType: string, _entityId?: string, _details?: any) {
+        // Logging is usually side-effect of other tools in Gateway.
+        // If we want manual logs, we need a tool.
     },
 
     async getLogs(limit: number = 50, offset: number = 0) {
-        return await run(`
-            SELECT * FROM audit_logs
-            ORDER BY created_at DESC
-            LIMIT ? OFFSET ?
-        `, [limit, offset]);
+        const res = await ToolExecutionService.executeTool('get_audit_logs', { limit, offset });
+        return res.data;
     }
 };

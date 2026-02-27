@@ -9,12 +9,28 @@ export const ToolDebugPanel: React.FC = () => {
     const [output, setOutput] = useState('');
     const [loading, setLoading] = useState(false);
 
+    // Remote Gateway settings
+    const [isRemote, setIsRemote] = useState(false);
+    const [gatewayUrl, setGatewayUrl] = useState('http://localhost:3200');
+    const [authToken, setAuthToken] = useState('');
+    const [approvalToken, setApprovalToken] = useState('');
+
     const handleExecute = async () => {
         setLoading(true);
-        setOutput('Executing...');
+        setOutput('Executing' + (isRemote ? ' (Remote)...' : ' (Local)...'));
         try {
             const parsedParams = JSON.parse(parameters);
-            const result = await ToolExecutionService.executeTool(selectedTool, parsedParams);
+
+            const options: any = {};
+            if (isRemote) {
+                options.remoteConfig = {
+                    baseUrl: gatewayUrl,
+                    authToken: authToken,
+                    approvalToken: approvalToken || undefined
+                };
+            }
+
+            const result = await ToolExecutionService.executeTool(selectedTool, parsedParams, options);
             setOutput(JSON.stringify(result, null, 2));
         } catch (error: any) {
             setOutput(`Error: ${error.message}`);
@@ -110,6 +126,57 @@ export const ToolDebugPanel: React.FC = () => {
                         onChange={(e) => setParameters(e.target.value)}
                         placeholder="{}"
                     />
+                </div>
+
+                {/* Remote Mode Toggle */}
+                <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-100 flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                        <label className="text-sm font-semibold text-indigo-900 flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full ${isRemote ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></span>
+                            Gateway Mode (Remote)
+                        </label>
+                        <button
+                            onClick={() => setIsRemote(!isRemote)}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isRemote ? 'bg-indigo-600' : 'bg-gray-200'}`}
+                        >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isRemote ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
+                    </div>
+
+                    {isRemote && (
+                        <div className="flex flex-col gap-2">
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Gateway URL</label>
+                                <input
+                                    type="text"
+                                    className="w-full mt-1 border border-gray-300 rounded p-1.5 text-xs text-gray-800 focus:ring-indigo-500"
+                                    value={gatewayUrl}
+                                    onChange={(e) => setGatewayUrl(e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Bearer Auth Token</label>
+                                <input
+                                    type="password"
+                                    className="w-full mt-1 border border-gray-300 rounded p-1.5 text-xs text-gray-800 focus:ring-indigo-500"
+                                    placeholder="Paste JWT here..."
+                                    value={authToken}
+                                    onChange={(e) => setAuthToken(e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Tier 2 Approval (Optional)</label>
+                                <input
+                                    type="password"
+                                    className="w-full mt-1 border border-gray-300 rounded p-1.5 text-xs text-gray-800 focus:ring-indigo-500"
+                                    placeholder="Approval JWT..."
+                                    value={approvalToken}
+                                    onChange={(e) => setApprovalToken(e.target.value)}
+                                />
+                                <p className="text-[10px] text-indigo-400 mt-1 italic">Dành cho delete/bulk ops</p>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Execute Button */}

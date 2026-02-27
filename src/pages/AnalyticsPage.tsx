@@ -42,7 +42,7 @@ function AnalyticsOverview() {
             return {
                 date: format(day, 'dd'),
                 fullDate: dateStr,
-                value: found ? found.value : 0
+                value: found ? found.total : 0
             };
         });
 
@@ -79,56 +79,60 @@ function AnalyticsOverview() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Spending Trend */}
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+                <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 min-w-0">
                     <h2 className="text-lg font-semibold mb-6 flex items-center gap-2">
                         Spending Trend
                         <span className="text-xs font-normal text-gray-500 ml-auto">Daily Expenses</span>
                     </h2>
-                    <div className="h-[300px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={dailyData}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-                                <XAxis
-                                    dataKey="date"
-                                    stroke="#9CA3AF"
-                                    fontSize={12}
-                                    tickLine={false}
-                                    axisLine={false}
-                                />
-                                <YAxis
-                                    stroke="#9CA3AF"
-                                    fontSize={12}
-                                    tickFormatter={(val) => `${val / 1000}k`}
-                                    tickLine={false}
-                                    axisLine={false}
-                                />
-                                <RechartsTooltip
-                                    contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#F3F4F6', borderRadius: '8px' }}
-                                    formatter={(value: any) => [formatMoney(Number(value) || 0), 'Spending']}
-                                    labelFormatter={(_label, payload) => {
-                                        if (payload && payload[0]) {
-                                            return formatDisplayDate(payload[0].payload.fullDate);
-                                        }
-                                        return '';
-                                    }}
-                                />
-                                <Bar dataKey="value" fill="#3B82F6" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
+                    <div className="w-full h-[300px]">
+                        {dailyData && dailyData.length > 0 ? (
+                            <ResponsiveContainer width="99%" height={300}>
+                                <BarChart data={dailyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                                    <XAxis
+                                        dataKey="date"
+                                        stroke="#9CA3AF"
+                                        fontSize={12}
+                                        tickLine={false}
+                                        axisLine={false}
+                                    />
+                                    <YAxis
+                                        stroke="#9CA3AF"
+                                        fontSize={12}
+                                        tickFormatter={(val) => `${val / 1000}k`}
+                                        tickLine={false}
+                                        axisLine={false}
+                                    />
+                                    <RechartsTooltip
+                                        contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#F3F4F6', borderRadius: '8px' }}
+                                        formatter={(value: any) => [formatMoney(Number(value) || 0), 'Spending']}
+                                        labelFormatter={(_label, payload) => {
+                                            if (payload && payload[0]) {
+                                                return formatDisplayDate(payload[0].payload.fullDate);
+                                            }
+                                            return '';
+                                        }}
+                                    />
+                                    <Bar dataKey="value" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="flex items-center justify-center h-full text-gray-400">No data found for this period</div>
+                        )}
                     </div>
                 </div>
 
                 {/* Spending Structure */}
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+                <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 min-w-0">
                     <h2 className="text-lg font-semibold mb-6 flex items-center gap-2">
                         Spending Structure
                         <span className="text-xs font-normal text-gray-500 ml-auto">
                             Total: {formatMoney(totalExpense)}
                         </span>
                     </h2>
-                    <div className="h-[300px] w-full flex items-center justify-center">
-                        {categoryData.length > 0 ? (
-                            <ResponsiveContainer width="100%" height="100%">
+                    <div className="w-full h-[300px] flex items-center justify-center">
+                        {categoryData && categoryData.length > 0 ? (
+                            <ResponsiveContainer width="99%" height={300}>
                                 <RePieChart>
                                     <Pie
                                         data={categoryData}

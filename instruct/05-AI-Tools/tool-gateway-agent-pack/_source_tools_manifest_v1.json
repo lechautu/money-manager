@@ -1,0 +1,1166 @@
+{
+    "manifest_version": "1.0",
+    "app_name": "Money Manager 2",
+    "last_updated": "2026-02-23",
+    "description": "Bản mô tả toàn bộ công cụ (API) khả dụng trong hệ thống quản lý tài chính Money Manager 2 dựa trên md/tools.txt",
+    "tools": [
+        {
+            "name": "get_accounts",
+            "category": "Accounts",
+            "description": "Lấy danh sách tất cả các tài khoản (Ngân hàng, Tiền mặt, Thẻ tín dụng) kèm theo thông tin tiền tệ và loại tài khoản.",
+            "parameters": {},
+            "tier": 0
+        },
+        {
+            "name": "create_account",
+            "category": "Accounts",
+            "description": "Khởi tạo tài khoản mới với số dư ban đầu (initial_balance).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Tên tài khoản"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "bank",
+                            "credit",
+                            "debit"
+                        ],
+                        "description": "Loại tài khoản"
+                    },
+                    "currency": {
+                        "type": "string",
+                        "description": "Mã tiền tệ (ví dụ: VND, USD)"
+                    },
+                    "initial_balance": {
+                        "type": "number",
+                        "description": "Số dư khởi tạo"
+                    },
+                    "note": {
+                        "type": "string",
+                        "description": "Ghi chú bổ sung"
+                    }
+                },
+                "required": [
+                    "name",
+                    "type",
+                    "currency",
+                    "initial_balance"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "update_account",
+            "category": "Accounts",
+            "description": "Chỉnh sửa tên, loại tài khoản hoặc ghi chú của một tài khoản hiện có.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "ID của tài khoản cần cập nhật"
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Tên mới của tài khoản"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "bank",
+                            "credit",
+                            "debit"
+                        ]
+                    },
+                    "currency": {
+                        "type": "string"
+                    },
+                    "initial_balance": {
+                        "type": "number"
+                    },
+                    "note": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "get_account_balances",
+            "category": "Accounts",
+            "description": "Truy vấn số dư thực tế (posted) và số dư dự kiến (effective) của tất cả tài khoản.",
+            "parameters": {},
+            "tier": 0
+        },
+        {
+            "name": "record_transaction",
+            "category": "Transactions",
+            "description": "Ghi nhận một khoản Thu nhập (income) hoặc Chi phí (expense). Hỗ trợ cả giao dịch chia nhỏ (split).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "account_id": {
+                        "type": "string",
+                        "description": "ID tài khoản thực hiện"
+                    },
+                    "amount": {
+                        "type": "number",
+                        "description": "Số tiền (Dương cho thu nhập, Âm cho chi phí)"
+                    },
+                    "category_id": {
+                        "type": "string",
+                        "description": "ID danh mục"
+                    },
+                    "sub_category_id": {
+                        "type": "string",
+                        "description": "ID danh mục con (nếu có)"
+                    },
+                    "date": {
+                        "type": "string",
+                        "format": "date",
+                        "description": "Ngày giao dịch (YYYY-MM-DD)"
+                    },
+                    "note": {
+                        "type": "string",
+                        "description": "Ghi chú giao dịch"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "posted",
+                            "pending",
+                            "ignored"
+                        ]
+                    },
+                    "is_split": {
+                        "type": "integer",
+                        "enum": [
+                            0,
+                            1
+                        ],
+                        "default": 0
+                    }
+                },
+                "required": [
+                    "account_id",
+                    "amount",
+                    "category_id",
+                    "date"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "transfer_funds",
+            "category": "Transactions",
+            "description": "Thực hiện chuyển tiền giữa hai tài khoản nội bộ.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fromAccountId": {
+                        "type": "string",
+                        "description": "ID tài khoản nguồn"
+                    },
+                    "toAccountId": {
+                        "type": "string",
+                        "description": "ID tài khoản đích"
+                    },
+                    "amount": {
+                        "type": "number",
+                        "description": "Số tiền cần chuyển"
+                    },
+                    "date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "categoryId": {
+                        "type": "string",
+                        "description": "ID danh mục phí chuyển khoản (nếu có)"
+                    },
+                    "note": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "fromAccountId",
+                    "toAccountId",
+                    "amount",
+                    "date"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "search_transactions",
+            "category": "Transactions",
+            "description": "Tìm kiếm giao dịch theo từ khóa, thời gian, danh mục hoặc tài khoản.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "month": {
+                        "type": "string",
+                        "placeholder": "YYYY-MM"
+                    },
+                    "startDate": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "endDate": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "search": {
+                        "type": "string"
+                    },
+                    "accountId": {
+                        "type": "string"
+                    },
+                    "categoryId": {
+                        "type": "string"
+                    }
+                }
+            },
+            "tier": 0
+        },
+        {
+            "name": "bulk_delete_transactions",
+            "category": "Transactions",
+            "description": "Xóa hàng loạt giao dịch theo danh sách ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ids": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "Danh sách các ID giao dịch cần xóa"
+                    }
+                },
+                "required": [
+                    "ids"
+                ]
+            },
+            "tier": 2
+        },
+        {
+            "name": "update_transaction_status",
+            "category": "Transactions",
+            "description": "Chuyển đổi trạng thái giao dịch (ví dụ: từ pending sang posted).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "ID giao dịch"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "posted",
+                            "pending",
+                            "ignored"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "status"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "create_recurring_rule",
+            "category": "Recurring",
+            "description": "Thiết lập quy tắc thu chi lặp lại (Thuê nhà, Lương...).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "income",
+                            "expense",
+                            "transfer"
+                        ]
+                    },
+                    "amount": {
+                        "type": "number"
+                    },
+                    "frequency": {
+                        "type": "string",
+                        "enum": [
+                            "daily",
+                            "weekly",
+                            "biweekly",
+                            "monthly",
+                            "quarterly",
+                            "yearly"
+                        ]
+                    },
+                    "account_id": {
+                        "type": "string"
+                    },
+                    "category_id": {
+                        "type": "string"
+                    },
+                    "start_date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "auto_add": {
+                        "type": "integer",
+                        "enum": [
+                            0,
+                            1
+                        ]
+                    }
+                },
+                "required": [
+                    "name",
+                    "type",
+                    "amount",
+                    "frequency",
+                    "account_id",
+                    "start_date"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "get_recurring_rules",
+            "category": "Recurring",
+            "description": "Xem danh sách các quy tắc lặp lại đang hoạt động.",
+            "parameters": {},
+            "tier": 0
+        },
+        {
+            "name": "trigger_recurring_instance",
+            "category": "Recurring",
+            "description": "Kích hoạt thủ công một phiên bản giao dịch từ quy tắc định kỳ.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ruleId": {
+                        "type": "string"
+                    },
+                    "date": {
+                        "type": "string",
+                        "format": "date"
+                    }
+                },
+                "required": [
+                    "ruleId",
+                    "date"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "create_installment_plan",
+            "category": "Installments",
+            "description": "Tạo kế hoạch trả góp với lịch thanh toán tự động.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "credit_account_id": {
+                        "type": "string"
+                    },
+                    "total_amount": {
+                        "type": "number"
+                    },
+                    "tenor_months": {
+                        "type": "integer"
+                    },
+                    "start_date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "payment_category_id": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "name",
+                    "credit_account_id",
+                    "total_amount",
+                    "tenor_months",
+                    "start_date",
+                    "payment_category_id"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "get_installment_schedule",
+            "category": "Installments",
+            "description": "Xem lịch trình thanh toán chi tiết của một khoản trả góp.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "planId": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "planId"
+                ]
+            },
+            "tier": 0
+        },
+        {
+            "name": "pay_installment",
+            "category": "Installments",
+            "description": "Ghi nhận việc thanh toán cho một kỳ trả góp cụ thể.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "paymentId": {
+                        "type": "string",
+                        "description": "ID của kỳ thanh toán"
+                    },
+                    "transactionId": {
+                        "type": "string",
+                        "description": "ID giao dịch tương ứng"
+                    }
+                },
+                "required": [
+                    "paymentId",
+                    "transactionId"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "get_categories",
+            "category": "Categories",
+            "description": "Lấy danh mục chính và các danh mục con liên quan.",
+            "parameters": {},
+            "tier": 0
+        },
+        {
+            "name": "create_category",
+            "category": "Categories",
+            "description": "Thêm danh mục chi tiêu/thu nhập mới.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "name"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "create_subcategory",
+            "category": "Categories",
+            "description": "Thêm danh mục con vào một danh mục chính.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "categoryId": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "categoryId",
+                    "name"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "get_budgets",
+            "category": "Budget",
+            "description": "Lấy danh sách ngân sách của một tháng kèm tình trạng chi tiêu.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "month": {
+                        "type": "string",
+                        "description": "YYYY-MM"
+                    }
+                },
+                "required": [
+                    "month"
+                ]
+            },
+            "tier": 0
+        },
+        {
+            "name": "set_category_budget",
+            "category": "Budget",
+            "description": "Thiết lập hoặc thay đổi hạn mức chi tiêu cho một danh mục trong tháng.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "month": {
+                        "type": "string"
+                    },
+                    "categoryId": {
+                        "type": "string"
+                    },
+                    "subCategoryId": {
+                        "type": "string"
+                    },
+                    "amount": {
+                        "type": "number"
+                    }
+                },
+                "required": [
+                    "month",
+                    "categoryId",
+                    "amount"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "get_spending_analytics",
+            "category": "Analytics",
+            "description": "Lấy báo cáo phân tích chi tiêu theo cấu trúc hoặc xu hướng.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "month": {
+                        "type": "string",
+                        "description": "YYYY-MM"
+                    }
+                },
+                "required": [
+                    "month"
+                ]
+            },
+            "tier": 0
+        },
+        {
+            "name": "get_financial_forecast",
+            "category": "Analytics",
+            "description": "Lấy dữ liệu dự báo số dư tài khoản trong tương lai.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "months": {
+                        "type": "integer",
+                        "default": 12
+                    }
+                }
+            },
+            "tier": 0
+        },
+        {
+            "name": "get_monthly_summary",
+            "category": "Analytics",
+            "description": "Lấy tổng quan Thu - Chi - Thặng dư của một tháng.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "month": {
+                        "type": "string",
+                        "description": "YYYY-MM"
+                    }
+                },
+                "required": [
+                    "month"
+                ]
+            },
+            "tier": 0
+        },
+        {
+            "name": "get_audit_logs",
+            "category": "System",
+            "description": "Truy xuất lịch sử thay đổi của hệ thống.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "default": 50
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "default": 0
+                    }
+                }
+            },
+            "tier": 0
+        },
+        {
+            "name": "export_system_data",
+            "category": "System",
+            "description": "Xuất toàn bộ cơ sở dữ liệu ra định dạng JSON.",
+            "parameters": {},
+            "tier": 0
+        },
+        {
+            "name": "import_system_data",
+            "category": "System",
+            "description": "Khôi phục dữ liệu hệ thống từ tệp tin backup.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fileContent": {
+                        "type": "string",
+                        "description": "Nội dung JSON của file backup"
+                    }
+                },
+                "required": [
+                    "fileContent"
+                ]
+            },
+            "tier": 2
+        },
+        {
+            "name": "update_category",
+            "category": "Categories",
+            "description": "Đổi tên danh mục chính.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "name"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "update_subcategory",
+            "category": "Categories",
+            "description": "Đổi tên danh mục con.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "name"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "move_subcategory",
+            "category": "Categories",
+            "description": "Chuyển một danh mục con sang danh mục chính khác.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "subCategoryId": {
+                        "type": "string"
+                    },
+                    "newCategoryId": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "subCategoryId",
+                    "newCategoryId"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "delete_category",
+            "category": "Categories",
+            "description": "Xóa danh mục chính.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id"
+                ]
+            },
+            "tier": 2
+        },
+        {
+            "name": "delete_subcategory",
+            "category": "Categories",
+            "description": "Xóa danh mục con.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id"
+                ]
+            },
+            "tier": 2
+        },
+        {
+            "name": "update_transaction",
+            "category": "Transactions",
+            "description": "Cập nhật thông tin giao dịch.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "amount": {
+                        "type": "number"
+                    },
+                    "date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "category_id": {
+                        "type": "string"
+                    },
+                    "sub_category_id": {
+                        "type": "string"
+                    },
+                    "note": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "delete_transaction",
+            "category": "Transactions",
+            "description": "Xóa đơn lẻ một giao dịch.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id"
+                ]
+            },
+            "tier": 2
+        },
+        {
+            "name": "restore_transaction",
+            "category": "Transactions",
+            "description": "Khôi phục giao dịch đã xóa.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "bulk_restore_transactions",
+            "category": "Transactions",
+            "description": "Khôi phục hàng loạt giao dịch đã xóa.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ids": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "required": [
+                    "ids"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "delete_account",
+            "category": "Accounts",
+            "description": "Xóa tài khoản nếu không có ràng buộc dữ liệu.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id"
+                ]
+            },
+            "tier": 2
+        },
+        {
+            "name": "update_recurring_rule",
+            "category": "Recurring",
+            "description": "Chỉnh sửa quy tắc định kỳ.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "amount": {
+                        "type": "number"
+                    },
+                    "frequency": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "delete_recurring_rule",
+            "category": "Recurring",
+            "description": "Xóa một quy tắc định kỳ.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id"
+                ]
+            },
+            "tier": 2
+        },
+        {
+            "name": "get_recurring_instances",
+            "category": "Recurring",
+            "description": "Xem danh sách các phiên bản giao dịch sinh ra từ quy tắc định kỳ.",
+            "parameters": {},
+            "tier": 0
+        },
+        {
+            "name": "generate_recurring_instances",
+            "category": "Recurring",
+            "description": "Chạy tiến trình tự động tính toán và sinh các giao dịch định kỳ đến hạn.",
+            "parameters": {},
+            "tier": 1
+        },
+        {
+            "name": "get_installment_plans",
+            "category": "Installments",
+            "description": "Xem danh sách các kế hoạch trả góp.",
+            "parameters": {},
+            "tier": 0
+        },
+        {
+            "name": "delete_installment_plan",
+            "category": "Installments",
+            "description": "Xóa kế hoạch trả góp.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id"
+                ]
+            },
+            "tier": 2
+        },
+        {
+            "name": "check_overdue_installments",
+            "category": "Installments",
+            "description": "Cập nhật trạng thái các kỳ trả góp quá hạn hoặc đến hạn.",
+            "parameters": {},
+            "tier": 1
+        },
+        {
+            "name": "delete_budget",
+            "category": "Budget",
+            "description": "Xóa một mục ngân sách.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id"
+                ]
+            },
+            "tier": 2
+        },
+        {
+            "name": "clear_month_budgets",
+            "category": "Budget",
+            "description": "Xóa toàn bộ ngân sách trong một tháng.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "month": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "month"
+                ]
+            },
+            "tier": 2
+        },
+        {
+            "name": "clone_month_budget",
+            "category": "Budget",
+            "description": "Nhân bản ngân sách từ tháng trước sang tháng mới.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "sourceMonth": {
+                        "type": "string"
+                    },
+                    "targetMonth": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "sourceMonth",
+                    "targetMonth"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "generate_budgets_from_automation",
+            "category": "Budget",
+            "description": "Tự động tạo ngân sách từ khoản định kỳ và trả góp.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "month": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "month"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "get_dashboard_summary",
+            "category": "Analytics",
+            "description": "Lấy thông tin tổng quan dashboard.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "month": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "month"
+                ]
+            },
+            "tier": 0
+        },
+        {
+            "name": "get_cashflow_trend",
+            "category": "Analytics",
+            "description": "Phân tích xu hướng dòng tiền.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "startDate": {
+                        "type": "string"
+                    },
+                    "endDate": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "startDate",
+                    "endDate"
+                ]
+            },
+            "tier": 0
+        },
+        {
+            "name": "get_daily_spending",
+            "category": "Analytics",
+            "description": "Lấy biểu đồ chi tiêu theo ngày.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "month": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "month"
+                ]
+            },
+            "tier": 0
+        },
+        {
+            "name": "get_category_movers",
+            "category": "Analytics",
+            "description": "Phân tích biến động tăng/giảm chi tiêu.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "currentStart": {
+                        "type": "string"
+                    },
+                    "currentEnd": {
+                        "type": "string"
+                    },
+                    "compareStart": {
+                        "type": "string"
+                    },
+                    "compareEnd": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "currentStart",
+                    "currentEnd",
+                    "compareStart",
+                    "compareEnd"
+                ]
+            },
+            "tier": 0
+        },
+        {
+            "name": "get_pending_summary",
+            "category": "Analytics",
+            "description": "Lấy tổng hợp các khoản chưa thanh toán.",
+            "parameters": {},
+            "tier": 0
+        },
+        {
+            "name": "get_upcoming_payments",
+            "category": "Analytics",
+            "description": "Lấy danh sách các khoản sắp tới hạn.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "days": {
+                        "type": "integer"
+                    }
+                }
+            },
+            "tier": 0
+        },
+        {
+            "name": "get_forecast_details",
+            "category": "Analytics",
+            "description": "Xem chi tiết dữ liệu dự phóng tương lai.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "targetMonthStr": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "targetMonthStr"
+                ]
+            },
+            "tier": 0
+        },
+        {
+            "name": "get_settings",
+            "category": "System",
+            "description": "Lấy cấu hình hệ thống hiện tại.",
+            "parameters": {},
+            "tier": 0
+        },
+        {
+            "name": "set_date_format",
+            "category": "System",
+            "description": "Thay đổi định dạng ngày tháng.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "format": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "format"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "has_password",
+            "category": "System",
+            "description": "Kiểm tra xem ứng dụng có đang cài mật khẩu không.",
+            "parameters": {},
+            "tier": 0
+        },
+        {
+            "name": "set_lock_enabled",
+            "category": "System",
+            "description": "Bật / Tắt khóa ứng dụng.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "enabled": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "enabled"
+                ]
+            },
+            "tier": 1
+        }
+    ]
+}
