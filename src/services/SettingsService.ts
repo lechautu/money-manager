@@ -23,16 +23,13 @@ export const SettingsService = {
         await ToolExecutionService.executeTool('set_lock_enabled', { enabled });
     },
 
-    async setPassword(_password: string): Promise<void> {
-        // Need to add set_password to Gateway or do it via SQL if we have a raw exec
-        // For now, let's stick to the tools we have.
-        console.warn('setPassword via Gateway not fully implemented in tools manifest yet.');
+    async setPassword(password: string): Promise<void> {
+        await ToolExecutionService.executeTool('set_password', { password });
     },
 
-    async verifyPassword(_password: string): Promise<boolean> {
-        // This should probably be handled by the Gateway's auth if needed, 
-        // but for local app lock, we might need a specific tool.
-        return true;
+    async verifyPassword(password: string): Promise<boolean> {
+        const res = await ToolExecutionService.executeTool('verify_password', { password });
+        return res.data.valid;
     },
 
     async hasPassword(): Promise<boolean> {

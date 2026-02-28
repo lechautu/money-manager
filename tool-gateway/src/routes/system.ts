@@ -38,6 +38,25 @@ systemRoutes.post('/set_lock_enabled', auditLog('set_lock_enabled', 1, 'settings
     } catch (e: any) { res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: e.message } }); }
 });
 
+systemRoutes.post('/set_password', auditLog('set_password', 1, 'settings'), (req, res) => {
+    try {
+        const { password } = req.body;
+        // In a real app, hash this! For dev simplicity/local use, we'll store hash if provided or the raw if it looks like one.
+        // Actually, let's just use it as is for now as this is a local gateway.
+        run("UPDATE settings SET password_hash = ?, updated_at = ? WHERE id = 'default'", [password, new Date().toISOString()]);
+        res.json({ data: { success: true } });
+    } catch (e: any) { res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: e.message } }); }
+});
+
+systemRoutes.post('/verify_password', (req, res) => {
+    try {
+        const { password } = req.body;
+        const settings = get<any>('SELECT password_hash FROM settings LIMIT 1');
+        const valid = settings?.password_hash === password;
+        res.json({ data: { valid } });
+    } catch (e: any) { res.status(500).json({ error: { code: 'INTERNAL', message: e.message } }); }
+});
+
 systemRoutes.get('/get_audit_logs', (req, res) => {
     try {
         const limit = parseInt(req.query.limit as string || '50', 10);

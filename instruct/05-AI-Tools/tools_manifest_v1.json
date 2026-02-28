@@ -1161,6 +1161,40 @@
                 ]
             },
             "tier": 1
+        },
+        {
+            "name": "set_password",
+            "category": "System",
+            "description": "Đặt mật khẩu đăng nhập cho ứng dụng.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "password": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "password"
+                ]
+            },
+            "tier": 2
+        },
+        {
+            "name": "verify_password",
+            "category": "System",
+            "description": "Xác thực mật khẩu đăng nhập.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "password": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "password"
+                ]
+            },
+            "tier": 0
         }
     ]
 }

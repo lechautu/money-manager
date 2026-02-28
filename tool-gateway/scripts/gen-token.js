@@ -7,7 +7,7 @@ const approvalSecret = process.env.APPROVAL_TOKEN_SECRET || 'change-me-to-anothe
 const userId = 'user_123';
 
 // 1. Tạo Auth Token (Bearer)
-const authToken = jwt.sign({ sub: userId }, secret, { expiresIn: '30d' });
+const authToken = jwt.sign({ sub: userId }, secret, { expiresIn: '365d' });
 
 // 2. Tạo Approval Token (Cho Tier 2) - Ví dụ cho tool delete_account
 const approvalToken = jwt.sign({
