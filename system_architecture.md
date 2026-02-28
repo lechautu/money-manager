@@ -2,7 +2,7 @@
 
 ## 1. Tổng quan hệ thống
 
-Money Manager 2 (MM2) là ứng dụng quản lý tài chính cá nhân được thiết kế theo kiến trúc **3-tier**, bao gồm:
+Money Manager 2 (MM2) là ứng dụng quản lý tài chính cá nhân được thiết kế theo kiến trúc **3-tier (thin-client)**, bao gồm:
 
 ```mermaid
 graph LR
@@ -16,7 +16,7 @@ graph LR
     end
 
     subgraph "Storage"
-        DB["SQLite\n(sql.js)"]
+        DB["SQLite\n(file-based)"]
     end
 
     Client -- "REST API\n(JWT Auth)" --> Gateway
@@ -28,7 +28,7 @@ graph LR
 
 | Component | Tech Stack | Port | Vai trò |
 |-----------|-----------|------|---------|
-| **Client** | React 19, Vite 7, TailwindCSS 4, TypeScript | `:5173` (dev) | Giao diện người dùng (SPA) |
+| **Client** | React 19, Vite 7, TailwindCSS 4, TypeScript | `:5173` (dev) | Giao diện người dùng (thin-client SPA) |
 | **Tool Gateway** | Express 5, sql.js, JWT, TypeScript | `:3200` | REST API, business logic, data layer |
 | **MCP Server** | `@modelcontextprotocol/sdk`, Express 5, TypeScript | `:3100` | Cung cấp giao diện MCP cho AI agents |
 
@@ -44,7 +44,8 @@ graph LR
 - **Charts**: Recharts 3
 - **Icons**: Lucide React
 - **Date**: date-fns 4, react-day-picker 9
-- **Database (local mode)**: sql.js (via `wa-sqlite` legacy)
+> [!NOTE]
+> Kể từ bản cập nhật 2026-02-28, Client **không còn** chứa database in-browser. Mọi read/write đều thông qua Tool Gateway.
 
 ### 2.2 Cấu trúc thư mục
 
@@ -64,11 +65,6 @@ src/
 │   ├── settings/             # Data management, password, display settings
 │   ├── transactions/         # TransactionList, TransactionForm, CategoryPicker
 │   └── ui/                   # Reusable UI components
-├── db/
-│   ├── client.ts             # Local SQLite client (sql.js in-browser)
-│   ├── schema.ts             # Schema DDL (SCHEMA_V1)
-│   ├── migrations.ts         # Migration logic
-│   └── local_export.ts       # DB export utility
 ├── pages/                    # 13 page components
 │   ├── DashboardPage.tsx     # Trang chủ — thống kê tổng quan
 │   ├── AccountsPage.tsx      # Quản lý tài khoản
@@ -84,7 +80,7 @@ src/
 │   ├── AuditLogPage.tsx      # Nhật ký hoạt động
 │   └── SettingsPage.tsx      # Cài đặt
 ├── services/
-│   ├── ToolExecutionService.ts  # ★ Core: dual-mode tool dispatcher
+│   ├── ToolExecutionService.ts  # ★ Core: Gateway-only tool dispatcher
 │   ├── AccountService.ts        # Proxy → ToolExecutionService
 │   ├── TransactionService.ts    # Proxy → ToolExecutionService
 │   ├── CategoryService.ts       # Proxy → ToolExecutionService
@@ -96,39 +92,32 @@ src/
 │   ├── SettingsService.ts       # Proxy → ToolExecutionService
 │   ├── AuditService.ts          # Proxy → ToolExecutionService
 │   ├── BackupService.ts         # Backup/restore logic
-│   ├── ImportExportService.ts   # Import/export JSON
-│   └── local/                   # Local SQLite implementations
-│       ├── AccountService.ts
-│       ├── BudgetService.ts
-│       ├── CategoryService.ts
-│       ├── SettingsService.ts
-│       ├── StatisticsService.ts
-│       └── TransactionService.ts
+│   └── ImportExportService.ts   # Import/export JSON
 └── utils/
     └── ...
 ```
 
-### 2.3 Kiến trúc Dual-Mode
+### 2.3 Kiến trúc Gateway-Only (Thin Client)
 
-Client hỗ trợ **hai chế độ chạy** thông qua `ToolExecutionService`:
+Client hoạt động hoàn toàn như **thin client** — không chứa database hay business logic xử lý dữ liệu. Mọi thao tác đều đi qua `ToolExecutionService` → `GatewayClient` → Tool Gateway.
 
 ```mermaid
 flowchart TD
     Page["Page Component"] --> Service["Domain Service\n(e.g., TransactionService)"]
     Service --> TES["ToolExecutionService.executeTool()"]
-
-    TES -->|"localStorage:\nmm2_use_gateway = true"| Remote["Remote Mode\n(GatewayClient → REST API)"]
-    TES -->|"localStorage:\nmm2_use_gateway ≠ true"| Local["Local Mode\n(Local*Service → sql.js in-browser)"]
-
-    Remote --> GW["Tool Gateway :3200"]
-    Local --> SqlJs["sql.js (in-browser SQLite)"]
+    TES --> GC["GatewayClient.callTool()"]
+    GC -->|"REST API\n(JWT Auth)"| GW["Tool Gateway :3200"]
+    GW --> DB["SQLite (file-based)"]
 ```
 
-- **Local Mode** (legacy): Business logic chạy trực tiếp trong browser bằng sql.js. Mỗi `Local*Service` thực thi SQL trực tiếp trên DB in-memory.
-- **Remote Mode** (current): Tất cả gọi tới Tool Gateway qua `GatewayClient.callTool()`. Config được lưu trong `localStorage`:
-  - `mm2_use_gateway`: `"true"` để bật remote mode
+- Tất cả tool calls đều proxy qua `GatewayClient.callTool()` đến Tool Gateway
+- Config lưu trong `localStorage` (optional overrides):
   - `mm2_gateway_url`: URL của gateway (default `http://localhost:3200`)
-  - `mm2_gateway_token`: JWT token
+  - `mm2_gateway_token`: JWT token (có fallback token mặc định cho dev)
+- Token hết hạn sẽ tự động bị xóa khỏi localStorage, fallback về token mặc định
+
+> [!IMPORTANT]
+> Local mode (in-browser SQLite) đã bị loại bỏ hoàn toàn kể từ commit `52fefc7` (2026-02-28). Thư mục `src/db/` và `src/services/local/` là legacy code, không còn được import hay sử dụng.
 
 ### 2.4 Routing
 
@@ -329,6 +318,8 @@ Tất cả endpoints nằm dưới prefix `/api/v1/`. Tool name = endpoint path.
 | GET | `/get_forecast_details` | `get_forecast_details` | 0 | Chi tiết dự báo |
 | POST | `/set_date_format` | `set_date_format` | 1 | Đặt định dạng ngày |
 | POST | `/set_lock_enabled` | `set_lock_enabled` | 1 | Bật/tắt khoá |
+| POST | `/set_password` | `set_password` | 2 | Đặt mật khẩu |
+| POST | `/verify_password` | `verify_password` | 0 | Xác thực mật khẩu |
 | POST | `/export_system_data` | `export_system_data` | 1 | Xuất dữ liệu |
 | POST | `/import_system_data` | `import_system_data` | 2 | Nhập dữ liệu |
 
@@ -549,7 +540,7 @@ erDiagram
 - UNIQUE(`month`, `category_id`, `sub_category_id`)
 
 #### `settings` — Cài đặt
-- `lock_enabled`, `password_salt`, `password_verifier`
+- `lock_enabled`, `password_hash`, `date_format`
 
 #### `audit_logs` — Nhật ký
 - [action](file:///d:/Projects/mm2/src/services/TransactionService.ts#3-28), `entity_type`, `entity_id`, `details`
@@ -630,7 +621,7 @@ sequenceDiagram
 
 ## 7. Data Flow
 
-### 7.1 Client → Gateway (Remote Mode)
+### 7.1 Client → Gateway
 
 ```mermaid
 sequenceDiagram
@@ -643,7 +634,7 @@ sequenceDiagram
 
     UI->>DS: TransactionService.create(data)
     DS->>TES: executeTool("record_transaction", data)
-    TES->>TES: Check mm2_use_gateway = "true"
+    TES->>TES: Build Gateway config (URL + JWT)
     TES->>GC: callTool("record_transaction", data, config)
     GC->>GC: Determine method (POST)
     GC->>GW: POST /api/v1/record_transaction
@@ -652,7 +643,7 @@ sequenceDiagram
     GW->>DB: saveDatabase()
     GW-->>GC: {data: {id: "...", ...}}
     GC-->>TES: result
-    TES-->>DS: {status: "success", data: result}
+    TES-->>DS: result
     DS-->>UI: Transaction object
 ```
 
@@ -729,12 +720,12 @@ cd mcp-server && npm run build && npm start
 
 | Khía cạnh | Chi tiết |
 |-----------|----------|
-| **Kiến trúc** | 3-tier: SPA → REST API → SQLite |
+| **Kiến trúc** | 3-tier thin-client: SPA → REST API (Tool Gateway) → SQLite |
 | **Giao tiếp** | Client ↔ Gateway: REST/JSON over HTTP; AI ↔ MCP: MCP Protocol (Streamable HTTP) |
 | **Auth** | Client → Gateway: JWT; MCP → Server: Bearer Token |
-| **Database** | SQLite (sql.js), 11 bảng, file-based persistence |
+| **Database** | SQLite (sql.js trên server), 11 bảng, file-based persistence. Client không chứa DB |
 | **Security** | 3-tier system (Read / Write / Destructive), audit logging, approval guards |
-| **Dual Mode** | Client chạy được ở Local mode (in-browser SQLite) hoặc Remote mode (via Gateway) |
+| **Client Mode** | Gateway-only (thin client). Local mode đã loại bỏ hoàn toàn (2026-02-28) |
 | **MCP** | Manifest-driven tool registration, ~50+ tools, auto schema generation |
 | **Soft Delete** | Transactions sử dụng `deleted_at` thay vì xóa thật |
 | **Idempotency** | Hỗ trợ `idempotency_keys` table cho API calls |
