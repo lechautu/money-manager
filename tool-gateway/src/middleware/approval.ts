@@ -22,7 +22,7 @@ export function approvalGuard(toolName: string) {
         // Also support simple header for MCP server compatibility
         const simpleApproval = req.headers['x-mm-approval'] as string | undefined;
 
-        if (simpleApproval === 'approved') {
+        if (simpleApproval === 'approved' || simpleApproval === 'confirm') {
             // Simple mode: accept without cryptographic verification
             // Useful when MCP server already handled the approval flow
             next();

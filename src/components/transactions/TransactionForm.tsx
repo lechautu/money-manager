@@ -204,8 +204,13 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
             return;
         }
 
-        if (!isSplit && (!amount || !categoryId)) {
+        if (!isSplit && type !== 'transfer' && (!amount || !categoryId)) {
             showToast('Please fill all required fields', 'error');
+            return;
+        }
+
+        if (type === 'transfer' && !amount) {
+            showToast('Please enter an amount', 'error');
             return;
         }
 
@@ -256,8 +261,8 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
                     amount: finalAmount,
                     account_id: accountId,
                     to_account_id: type === 'transfer' ? toAccountId : null,
-                    category_id: isSplit ? undefined : categoryId,
-                    sub_category_id: isSplit ? undefined : (subCategoryId || null),
+                    category_id: isSplit ? undefined : (type === 'transfer' ? null : categoryId),
+                    sub_category_id: isSplit ? undefined : (type === 'transfer' ? null : (subCategoryId || null)),
                     note,
                     status,
                     month: date.slice(0, 7),
@@ -275,7 +280,7 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
             } else {
                 // New record
                 if (type === 'transfer') {
-                    savedTx = await TransactionService.transfer(accountId, toAccountId, val, date, categoryId, subCategoryId || undefined, note);
+                    savedTx = await TransactionService.transfer(accountId, toAccountId, val, date, undefined, undefined, note);
                 } else {
                     const finalAmount = isSplit
                         ? (type === 'expense' ? -computedTotal : computedTotal)
@@ -505,47 +510,18 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
                         </div>
 
                         {/* Category Selection */}
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <div className="flex justify-between items-center mb-1">
-                                    <label className="block text-xs text-gray-400">Category</label>
-                                    <button
-                                        onClick={() => {
-                                            const name = prompt("Enter new category name:");
-                                            if (name) {
-                                                CategoryService.createCategory(name).then(newCat => {
-                                                    setCategories([...categories, newCat]);
-                                                    setCategoryId(newCat.id);
-                                                });
-                                            }
-                                        }}
-                                        className="text-xs text-primary hover:text-blue-400"
-                                    >
-                                        + New
-                                    </button>
-                                </div>
-                                <select
-                                    value={categoryId}
-                                    onChange={e => setCategoryId(e.target.value)}
-                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary"
-                                >
-                                    <option value="">Select Category</option>
-                                    {categories.map(c => (
-                                        <option key={c.id} value={c.id}>{c.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <div className="flex justify-between items-center mb-1">
-                                    <label className="block text-xs text-gray-400">Sub Category</label>
-                                    {categoryId && (
+                        {type !== 'transfer' && (
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <div className="flex justify-between items-center mb-1">
+                                        <label className="block text-xs text-gray-400">Category</label>
                                         <button
                                             onClick={() => {
-                                                const name = prompt("Enter new sub-category name:");
+                                                const name = prompt("Enter new category name:");
                                                 if (name) {
-                                                    CategoryService.createSubCategory(categoryId, name).then(newSub => {
-                                                        setSubCategories([...subCategories, newSub]);
-                                                        setSubCategoryId(newSub.id);
+                                                    CategoryService.createCategory(name).then(newCat => {
+                                                        setCategories([...categories, newCat]);
+                                                        setCategoryId(newCat.id);
                                                     });
                                                 }
                                             }}
@@ -553,21 +529,52 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
                                         >
                                             + New
                                         </button>
-                                    )}
+                                    </div>
+                                    <select
+                                        value={categoryId}
+                                        onChange={e => setCategoryId(e.target.value)}
+                                        className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary"
+                                    >
+                                        <option value="">Select Category</option>
+                                        {categories.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
                                 </div>
-                                <select
-                                    value={subCategoryId}
-                                    onChange={e => setSubCategoryId(e.target.value)}
-                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary"
-                                    disabled={!categoryId}
-                                >
-                                    <option value="">Select Sub Category</option>
-                                    {subCategories.map(c => (
-                                        <option key={c.id} value={c.id}>{c.name}</option>
-                                    ))}
-                                </select>
+                                <div>
+                                    <div className="flex justify-between items-center mb-1">
+                                        <label className="block text-xs text-gray-400">Sub Category</label>
+                                        {categoryId && (
+                                            <button
+                                                onClick={() => {
+                                                    const name = prompt("Enter new sub-category name:");
+                                                    if (name) {
+                                                        CategoryService.createSubCategory(categoryId, name).then(newSub => {
+                                                            setSubCategories([...subCategories, newSub]);
+                                                            setSubCategoryId(newSub.id);
+                                                        });
+                                                    }
+                                                }}
+                                                className="text-xs text-primary hover:text-blue-400"
+                                            >
+                                                + New
+                                            </button>
+                                        )}
+                                    </div>
+                                    <select
+                                        value={subCategoryId}
+                                        onChange={e => setSubCategoryId(e.target.value)}
+                                        className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary"
+                                        disabled={!categoryId}
+                                    >
+                                        <option value="">Select Sub Category</option>
+                                        {subCategories.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
                             </div>
-                        </div>
+                        )}
                     </>
                 )}
 

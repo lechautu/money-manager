@@ -15,6 +15,9 @@ import {
 import { TransactionForm } from './transactions/TransactionForm';
 import { twMerge } from 'tailwind-merge';
 import { ToolDebugPanel } from './ui/ToolDebugPanel';
+import { RecurringService } from '../services/RecurringService';
+import { InstallmentService } from '../services/InstallmentService';
+import { useEffect } from 'react';
 
 const NAV_ITEMS = [
     { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -28,13 +31,13 @@ const NAV_ITEMS = [
     { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
-function NavItem({ to, icon: Icon, label, className }: { to: string; icon: any; label: string, className?: string }) {
+function NavItem({ to, icon: Icon, label, className, badgeCount }: { to: string; icon: any; label: string, className?: string, badgeCount?: number }) {
     return (
         <NavLink
             to={to}
             className={({ isActive }) =>
                 twMerge(
-                    'flex flex-col items-center justify-center p-2 text-xs font-medium text-gray-400 hover:text-white md:flex-row md:justify-start md:gap-3 md:text-sm md:rounded-lg md:px-3 md:py-2 transition-colors',
+                    'relative flex flex-col items-center justify-center p-2 text-xs font-medium text-gray-400 hover:text-white md:flex-row md:justify-start md:gap-3 md:text-sm md:rounded-lg md:px-3 md:py-2 transition-colors',
                     isActive && 'text-primary md:bg-gray-800 md:text-white',
                     className
                 )
@@ -42,12 +45,59 @@ function NavItem({ to, icon: Icon, label, className }: { to: string; icon: any; 
         >
             <Icon className="h-6 w-6 md:h-5 md:w-5" />
             <span className="mt-1 md:mt-0 truncate">{label}</span>
+            {badgeCount !== undefined && badgeCount > 0 && (
+                <span className="absolute top-1 right-2 md:static md:ml-auto flex h-4 min-w-[1rem] px-1 items-center justify-center bg-red-600 text-[10px] font-bold text-white rounded-full group-hover:scale-110 transition-transform">
+                    {badgeCount > 9 ? '9+' : badgeCount}
+                </span>
+            )}
         </NavLink>
     );
 }
 
 export function AppLayout() {
     const [isFormOpen, setIsFormOpen] = useState(false);
+    const [installmentCount, setInstallmentCount] = useState(0);
+    const [recurringCount, setRecurringCount] = useState(0);
+
+    const fetchPendingCounts = async () => {
+        try {
+            const [inst, rec] = await Promise.all([
+                InstallmentService.getPendingCount(),
+                RecurringService.getPendingCount()
+            ]);
+            setInstallmentCount(inst);
+            setRecurringCount(rec);
+        } catch (e) {
+            console.error("Failed to fetch pending counts", e);
+        }
+    };
+
+    // Background task processing
+    useEffect(() => {
+        const runBackgroundTasks = async () => {
+            try {
+                console.log("Running background tasks (Recurring & Installments)...");
+                await Promise.all([
+                    RecurringService.generateInstances(),
+                    InstallmentService.checkOverdue()
+                ]);
+
+                // Fetch counts after checks
+                fetchPendingCounts();
+            } catch (e) {
+                console.error("Background tasks failed", e);
+            }
+        };
+        runBackgroundTasks();
+
+        const handleRefresh = () => fetchPendingCounts();
+        window.addEventListener('refresh-installment-count', handleRefresh);
+        window.addEventListener('refresh-recurring-count', handleRefresh);
+        return () => {
+            window.removeEventListener('refresh-installment-count', handleRefresh);
+            window.removeEventListener('refresh-recurring-count', handleRefresh);
+        };
+    }, []);
 
     return (
         <div className="flex h-screen w-full flex-col md:flex-row bg-gray-950 text-gray-100">
@@ -58,7 +108,15 @@ export function AppLayout() {
                 </div>
                 <nav className="flex-1 space-y-1 px-4 py-4 overflow-y-auto">
                     {NAV_ITEMS.map((item) => (
-                        <NavItem key={item.to} {...item} />
+                        <NavItem
+                            key={item.to}
+                            {...item}
+                            badgeCount={
+                                item.to === '/installments' ? installmentCount :
+                                    item.to === '/recurring' ? recurringCount :
+                                        undefined
+                            }
+                        />
                     ))}
                 </nav>
             </aside>
@@ -73,7 +131,15 @@ export function AppLayout() {
             {/* Bottom Nav (Mobile) */}
             <nav className="fixed bottom-0 left-0 right-0 flex h-16 items-center justify-around border-t border-gray-800 bg-gray-900 px-2 md:hidden z-50">
                 {NAV_ITEMS.slice(0, 5).map((item) => (
-                    <NavItem key={item.to} {...item} />
+                    <NavItem
+                        key={item.to}
+                        {...item}
+                        badgeCount={
+                            item.to === '/installments' ? installmentCount :
+                                item.to === '/recurring' ? recurringCount :
+                                    undefined
+                        }
+                    />
                 ))}
             </nav>
 

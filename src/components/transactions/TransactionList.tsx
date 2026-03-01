@@ -10,6 +10,7 @@ import { Plus, ArrowUp, ArrowDown, Trash2, MoreVertical, Copy, Layers, ChevronLe
 import { useToast } from '../common/Toast';
 import { useUndo } from '../common/UndoProvider';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { Link as LinkIcon } from 'lucide-react';
 import { DateRangePicker } from '../common/DateRangePicker';
 import {
     startOfDay, endOfDay,
@@ -617,19 +618,19 @@ export function TransactionList() {
                                     displayAmount = Math.abs(tx.amount);
                                     if (!description) description = `Transfer from ${acc?.name}`;
                                     accountLabel = toAcc?.name || '';
-                                    categoryLabel = 'Transfer In';
+                                    categoryLabel = acc?.name ? `Transfer From: ${acc.name}` : 'Transfer In';
                                 } else {
                                     // Outgoing Transfer
                                     isExpense = true;
                                     displayAmount = tx.amount; // negative
                                     if (!description) description = `Transfer to ${toAcc?.name}`;
                                     accountLabel = acc?.name || '';
-                                    categoryLabel = 'Transfer Out';
+                                    categoryLabel = toAcc?.name ? `Transfer To: ${toAcc.name}` : 'Transfer Out';
                                 }
                             } else {
                                 // Fallback (should not happen with displayTxs expansion)
                                 if (!description) description = `Transfer: ${acc?.name} → ${toAcc?.name}`;
-                                categoryLabel = 'Transfer';
+                                categoryLabel = toAcc?.name ? `Transfer To: ${toAcc.name}` : 'Transfer';
                                 accountLabel = `${acc?.name} → ${toAcc?.name}`;
                             }
                         } else if (tx.is_split) {
@@ -662,6 +663,20 @@ export function TransactionList() {
                                         {!!tx.is_split && <Layers size={12} className="inline mr-1 text-primary shrink-0" />}
                                         <span className="truncate" title={categoryLabel}>{categoryLabel}</span>
                                     </div>
+
+                                    {(tx.recurring_name || tx.installment_plan_name) && (
+                                        <div className="mt-1 flex items-center gap-1.5">
+                                            <div className="px-1.5 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded text-[9px] font-bold uppercase tracking-wider flex items-center gap-1 shrink-0">
+                                                <LinkIcon size={10} />
+                                                {tx.source === 'recurring' ? 'Recurring' : 'Installment'}
+                                            </div>
+                                            <span className="text-[10px] text-gray-500 font-medium truncate italic" title={tx.recurring_name || tx.installment_plan_name}>
+                                                {tx.recurring_name || tx.installment_plan_name}
+                                                {tx.installment_period && ` (${tx.installment_period})`}
+                                            </span>
+                                        </div>
+                                    )}
+
                                     <div className="text-xs text-gray-500 md:hidden">
                                         {accountLabel}
                                     </div>
@@ -740,6 +755,7 @@ export function TransactionList() {
                     defaultValues={cloningTx || (filterAccountId ? { account_id: filterAccountId } : undefined)}
                     onSuccess={loadData}
                 />
+
             </div>
         </div >
     );

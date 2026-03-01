@@ -1,12 +1,11 @@
 export interface GatewayConfig {
     baseUrl: string;
-    authToken: string;
     approvalToken?: string;
 }
 
 export const GatewayClient = {
     async callTool(toolName: string, parameters: any, config: GatewayConfig) {
-        // Determine method (keeping it simple for now, matching the proxy logic we added)
+        // Determine method (matching the proxy logic)
         let method = 'POST';
         let url = `${config.baseUrl}/api/v1/${toolName}`;
         let body: string | undefined = JSON.stringify(parameters);
@@ -35,12 +34,13 @@ export const GatewayClient = {
 
         const headers: Record<string, string> = {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${config.authToken}`,
+            // No Authorization header needed — security contract v3 uses
+            // Origin-based trust for localhost WebUI (browser auto-sets Origin)
         };
 
         if (config.approvalToken) {
-            if (config.approvalToken === 'approved') {
-                headers['X-MM-Approval'] = 'approved';
+            if (config.approvalToken === 'approved' || config.approvalToken === 'confirm') {
+                headers['X-MM-Approval'] = config.approvalToken;
             } else {
                 headers['X-MM-Approval-Token'] = config.approvalToken;
             }

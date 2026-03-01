@@ -3,24 +3,35 @@ import { v4 as uuidv4 } from 'uuid';
 
 export const TransactionService = {
     getAll(filter: Record<string, any> = {}) {
-        const conditions: string[] = ['deleted_at IS NULL'];
+        const conditions: string[] = ['t.deleted_at IS NULL'];
         const params: any[] = [];
 
-        if (filter.month) { conditions.push('month = ?'); params.push(filter.month); }
-        if (filter.startDate) { conditions.push('date >= ?'); params.push(filter.startDate); }
-        if (filter.endDate) { conditions.push('date <= ?'); params.push(filter.endDate); }
-        if (filter.accountId) { conditions.push('(account_id = ? OR to_account_id = ?)'); params.push(filter.accountId, filter.accountId); }
-        if (filter.categoryId) { conditions.push('category_id = ?'); params.push(filter.categoryId); }
-        if (filter.subCategoryId) { conditions.push('sub_category_id = ?'); params.push(filter.subCategoryId); }
-        if (filter.status) { conditions.push('status = ?'); params.push(filter.status); }
-        if (filter.source) { conditions.push('source = ?'); params.push(filter.source); }
-        if (filter.search) { conditions.push('note LIKE ?'); params.push(`%${filter.search}%`); }
+        if (filter.month) { conditions.push('t.month = ?'); params.push(filter.month); }
+        if (filter.startDate) { conditions.push('t.date >= ?'); params.push(filter.startDate); }
+        if (filter.endDate) { conditions.push('t.date <= ?'); params.push(filter.endDate); }
+        if (filter.accountId) { conditions.push('(t.account_id = ? OR t.to_account_id = ?)'); params.push(filter.accountId, filter.accountId); }
+        if (filter.categoryId) { conditions.push('t.category_id = ?'); params.push(filter.categoryId); }
+        if (filter.subCategoryId) { conditions.push('t.sub_category_id = ?'); params.push(filter.subCategoryId); }
+        if (filter.status) { conditions.push('t.status = ?'); params.push(filter.status); }
+        if (filter.source) { conditions.push('t.source = ?'); params.push(filter.source); }
+        if (filter.search) { conditions.push('t.note LIKE ?'); params.push(`%${filter.search}%`); }
 
         const sortBy = filter.sortBy || 'date';
         const sortOrder = filter.sortOrder || 'desc';
         const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-        return all(`SELECT * FROM transactions ${where} ORDER BY ${sortBy} ${sortOrder}`, params);
+        return all(`
+            SELECT t.*, 
+                   r.name as recurring_name,
+                   ip.name as installment_plan_name,
+                   p.due_month as installment_period
+            FROM transactions t
+            LEFT JOIN recurring_rules r ON t.source = 'recurring' AND t.source_ref_id = r.id
+            LEFT JOIN installment_payments p ON t.source = 'installment' AND t.source_ref_id = p.id
+            LEFT JOIN installment_plans ip ON p.plan_id = ip.id
+            ${where} 
+            ORDER BY t.${sortBy} ${sortOrder}
+        `, params);
     },
 
     getById(id: string) {

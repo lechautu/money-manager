@@ -43,10 +43,12 @@ export async function initDatabase(): Promise<void> {
     // Migration stubs: Ensure all tables match expected local schema
     const migrations = [
         "ALTER TABLE sub_categories ADD COLUMN is_archived INTEGER DEFAULT 0",
+        "ALTER TABLE installment_plans ADD COLUMN auto_add INTEGER DEFAULT 0",
         "ALTER TABLE installment_plans ADD COLUMN notify_before_days INTEGER DEFAULT 3",
         "ALTER TABLE recurring_rules ADD COLUMN notify_before_days INTEGER DEFAULT 3",
         "ALTER TABLE installment_payments ADD COLUMN due_month TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE installment_payments ADD COLUMN paid_at TEXT",
+        "ALTER TABLE installment_payments ADD COLUMN expense_transaction_id TEXT",
         "ALTER TABLE settings ADD COLUMN password_salt TEXT",
         "ALTER TABLE settings ADD COLUMN password_verifier TEXT",
         "ALTER TABLE audit_logs ADD COLUMN action TEXT NOT NULL DEFAULT 'unknown'",
@@ -56,6 +58,13 @@ export async function initDatabase(): Promise<void> {
     ];
     for (const m of migrations) {
         try { db.exec(m); } catch (e) { /* ignore if column exists */ }
+    }
+
+    // Sync legacy auto_pay to new auto_add if both exist and auto_add is 0
+    try {
+        db.exec("UPDATE installment_plans SET auto_add = auto_pay WHERE auto_add = 0");
+    } catch (e) {
+        // One of the columns might not exist, ignore
     }
 
     saveDatabase();

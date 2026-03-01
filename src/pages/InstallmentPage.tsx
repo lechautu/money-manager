@@ -18,6 +18,7 @@ export default function InstallmentPage() {
     const [payingPlan, setPayingPlan] = useState<InstallmentPlan | null>(null);
 
     const [accNames, setAccNames] = useState<Record<string, string>>({});
+    const [hasPendingCount, setHasPendingCount] = useState(0);
     const { showToast } = useToast();
 
     useEffect(() => {
@@ -26,18 +27,29 @@ export default function InstallmentPage() {
 
     const loadData = async () => {
         setLoading(true);
-        const [ps, accs] = await Promise.all([
+
+        // Run check first to ensure latest statuses and auto-add expenses
+        try {
+            await InstallmentService.checkOverdue();
+        } catch (e) {
+            console.error('Check overdue failed', e);
+        }
+
+        const [ps, accs, pendingCount] = await Promise.all([
             InstallmentService.getAll(),
             AccountService.getAll(),
-            InstallmentService.checkOverdue()
+            InstallmentService.getPendingCount()
         ]);
+
         setPlans(ps);
+        setHasPendingCount(pendingCount);
 
         const am: Record<string, string> = {};
         accs.forEach(acc => am[acc.id] = acc.name);
         setAccNames(am);
 
         setLoading(false);
+        window.dispatchEvent(new CustomEvent('refresh-installment-count'));
     };
 
     const handleExpand = async (planId: string) => {
@@ -83,12 +95,14 @@ export default function InstallmentPage() {
             </div>
 
             {
-                payments.some(p => p.status === 'overdue' || p.status === 'due') && (
-                    <div className="bg-red-900/40 border border-red-900/60 p-4 rounded-lg flex items-center gap-3 text-red-200">
-                        <AlertTriangle className="text-red-500" />
-                        <div>
-                            <p className="font-semibold text-sm">Action Required</p>
-                            <p className="text-xs">You have installments that are due or overdue. Please verify.</p>
+                hasPendingCount > 0 && (
+                    <div className="bg-red-900/40 border border-red-900/60 p-4 rounded-lg flex items-center gap-4 text-red-200 shadow-lg animate-in fade-in slide-in-from-top-4 duration-300">
+                        <div className="bg-red-600 p-2 rounded-full">
+                            <AlertTriangle className="text-white" size={20} />
+                        </div>
+                        <div className="flex-1">
+                            <p className="font-bold text-sm">Action Required</p>
+                            <p className="text-xs opacity-90">You have {hasPendingCount} installment payment(s) that are due or overdue. Please check and process them.</p>
                         </div>
                     </div>
                 )
@@ -124,6 +138,24 @@ export default function InstallmentPage() {
                             </div>
 
                             <button
+                                onClick={async (e) => {
+                                    e.stopPropagation();
+                                    try {
+                                        await InstallmentService.update(plan.id, { auto_add: plan.auto_add ? 0 : 1 });
+                                        showToast(`Auto-Add ${plan.auto_add ? 'disabled' : 'enabled'}`);
+                                        loadData();
+                                    } catch (err) {
+                                        showToast('Failed to update plan', 'error');
+                                    }
+                                }}
+                                className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider transition-colors ${plan.auto_add ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30' : 'bg-gray-800 text-gray-400 border border-gray-700 hover:text-white'}`}
+                                title={plan.auto_add ? "Click to disable Auto-Add" : "Click to enable Auto-Add"}
+                            >
+                                <div className={`w-1.5 h-1.5 rounded-full ${plan.auto_add ? 'bg-emerald-500 animate-pulse' : 'bg-gray-500'}`} />
+                                {plan.auto_add ? 'Auto-Add: ON' : 'Auto-Add: OFF'}
+                            </button>
+
+                            <button
                                 onClick={(e) => { e.stopPropagation(); handleDelete(plan.id); }}
                                 className="p-2 text-gray-500 hover:text-red-500 rounded hover:bg-red-500/10"
                             >
@@ -143,11 +175,17 @@ export default function InstallmentPage() {
                                             </div>
                                             <div className="flex items-center gap-4">
                                                 <span className="font-medium text-white">{formatMoney(pay.amount)}</span>
-                                                <span className={`text-xs px-2 py-0.5 rounded ${pay.status === 'paid' ? 'bg-emerald-500/20 text-emerald-500' :
+                                                <span className={`text-xs px-2 py-0.5 rounded flex items-center gap-1.5 ${pay.status === 'paid' ? 'bg-emerald-500/20 text-emerald-500' :
                                                     pay.status === 'overdue' ? 'bg-red-500/20 text-red-500' :
-                                                        'bg-gray-700 text-gray-400'
+                                                        pay.status === 'due' ? 'bg-amber-500/20 text-amber-500 font-medium' :
+                                                            'bg-gray-700 text-gray-400'
                                                     }`}>
-                                                    {pay.status}
+                                                    <div className={`w-1 h-1 rounded-full ${pay.status === 'paid' ? 'bg-emerald-500' :
+                                                        pay.status === 'overdue' ? 'bg-red-500' :
+                                                            pay.status === 'due' ? 'bg-amber-500 animate-pulse' :
+                                                                'bg-gray-500'
+                                                        }`} />
+                                                    {pay.status === 'due' && pay.expense_transaction_id ? 'Debt Added -> Pay Now' : pay.status}
                                                 </span>
                                                 {pay.status !== 'paid' && (
                                                     <div className="flex gap-2">

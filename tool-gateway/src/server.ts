@@ -2,9 +2,11 @@ import 'dotenv/config';
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { authMiddleware } from './middleware/auth.js';
+import { originGuard, TRUSTED_ORIGINS } from './middleware/origin-guard.js';
 import { initDatabase } from './db/client.js';
 
 const PORT = parseInt(process.env.PORT || '3200', 10);
+const GATEWAY_HOST = process.env.GATEWAY_HOST || '127.0.0.1';
 const REQUEST_SIZE_LIMIT = process.env.REQUEST_SIZE_LIMIT || '5mb';
 
 async function main() {
@@ -25,7 +27,11 @@ async function main() {
     const app = express();
 
     // --- Global Middleware ---
-    app.use(cors());
+    // CORS: Only allow trusted origins (not wildcard)
+    app.use(cors({
+        origin: TRUSTED_ORIGINS,
+        credentials: true,
+    }));
     app.use(express.json({ limit: REQUEST_SIZE_LIMIT }));
 
     // TraceId propagation
@@ -36,7 +42,7 @@ async function main() {
         next();
     });
 
-    // --- Health & Readiness ---
+    // --- Health & Readiness (no auth required) ---
     app.get('/healthz', (_req, res) => {
         res.status(200).json({ status: 'ok' });
     });
@@ -49,8 +55,10 @@ async function main() {
         res.json({ app: 'mm2-tool-gateway', version: '1.0.0' });
     });
 
-    // --- Auth middleware for all /api routes ---
-    app.use('/api', authMiddleware);
+    // --- Security middleware for all /api routes ---
+    // 1. Origin Guard: validate Origin header on state-changing methods
+    // 2. Auth: allow trusted-local, internal token, or JWT
+    app.use('/api', originGuard, authMiddleware);
 
     // --- Routes ---
     app.use('/api/v1', accountRoutes);
@@ -71,11 +79,13 @@ async function main() {
         });
     });
 
-    // --- Start ---
-    app.listen(PORT, () => {
-        console.log(`mm2 Tool Gateway running on http://localhost:${PORT}`);
-        console.log(`Health: http://localhost:${PORT}/healthz`);
-        console.log(`API: http://localhost:${PORT}/api/v1`);
+    // --- Start (loopback-only binding per security contract) ---
+    app.listen(PORT, GATEWAY_HOST, () => {
+        console.log(`mm2 Tool Gateway running on http://${GATEWAY_HOST}:${PORT}`);
+        console.log(`  Bound to: ${GATEWAY_HOST} (loopback-only)`);
+        console.log(`  Trusted Origins: ${TRUSTED_ORIGINS.join(', ')}`);
+        console.log(`  Health: http://${GATEWAY_HOST}:${PORT}/healthz`);
+        console.log(`  API: http://${GATEWAY_HOST}:${PORT}/api/v1`);
     });
 }
 

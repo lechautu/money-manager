@@ -11,6 +11,7 @@ export interface InstallmentPlan {
     payment_source_account_id?: string;
     payment_category_id: string;
     payment_sub_category_id?: string;
+    auto_add: number; // 0 or 1
     created_at: string;
     updated_at: string;
 }
@@ -22,9 +23,10 @@ export interface InstallmentPayment {
     due_month: string;
     amount: number;
     status: 'upcoming' | 'due' | 'overdue' | 'paid';
-    paid_at?: string;
     linked_transaction_id?: string;
     generated_transaction_id?: string;
+    expense_transaction_id?: string;
+    paid_at?: string;
 }
 
 export const InstallmentService = {
@@ -48,6 +50,11 @@ export const InstallmentService = {
         return res.data;
     },
 
+    async update(id: string, plan: Partial<Omit<InstallmentPlan, 'id' | 'created_at' | 'updated_at'>>): Promise<InstallmentPlan> {
+        const res = await ToolExecutionService.executeTool('update_installment_plan', { id, ...plan });
+        return res.data;
+    },
+
     async delete(id: string): Promise<void> {
         await ToolExecutionService.executeTool('delete_installment_plan', { id });
     },
@@ -58,5 +65,14 @@ export const InstallmentService = {
 
     async markPaid(paymentId: string, transactionId: string): Promise<void> {
         await ToolExecutionService.executeTool('pay_installment', { paymentId, transactionId });
+    },
+
+    async getPendingCount(): Promise<number> {
+        const res = await ToolExecutionService.executeTool('get_pending_installment_count', {});
+        return res.data.count;
+    },
+
+    async linkTransaction(paymentId: string, transactionId: string, type: 'expense' | 'payment'): Promise<void> {
+        await ToolExecutionService.executeTool('link_installment_transaction', { paymentId, transactionId, type });
     }
 };

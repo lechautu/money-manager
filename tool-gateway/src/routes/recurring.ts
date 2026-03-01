@@ -15,6 +15,11 @@ recurringRoutes.get('/get_recurring_instances', (req, res) => {
     catch (e: any) { res.status(500).json({ error: { code: 'INTERNAL', message: e.message } }); }
 });
 
+recurringRoutes.get('/get_pending_recurring_count', (_req, res) => {
+    try { res.json({ data: { count: RecurringService.getPendingCount() } }); }
+    catch (e: any) { res.status(500).json({ error: { code: 'INTERNAL', message: e.message } }); }
+});
+
 recurringRoutes.post('/create_recurring_rule', auditLog('create_recurring_rule', 1, 'recurring'), (req, res) => {
     try { res.json({ data: RecurringService.create(req.body) }); }
     catch (e: any) { res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: e.message } }); }
@@ -37,5 +42,10 @@ recurringRoutes.post('/generate_recurring_instances', auditLog('generate_recurri
 
 recurringRoutes.post('/trigger_recurring_instance', auditLog('trigger_recurring_instance', 1, 'recurring'), (req, res) => {
     try { res.json({ data: RecurringService.triggerInstance(req.body.ruleId, req.body.date) }); }
+    catch (e: any) { res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: e.message } }); }
+});
+
+recurringRoutes.post('/link_recurring_transaction', auditLog('link_recurring_transaction', 1, 'recurring'), (req, res) => {
+    try { res.json({ data: RecurringService.linkTransaction(req.body.ruleId, req.body.transactionId, req.body.date) }); }
     catch (e: any) { res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: e.message } }); }
 });

@@ -372,20 +372,20 @@ export function RecurringForm({ isOpen, onClose, initialData, onSuccess }: Recur
 
                 <div>
                     <label className="block text-xs font-medium text-gray-400 mb-1">Processing Mode</label>
-                    <div className="flex bg-gray-800 rounded p-1">
+                    <div className="flex bg-gray-900/50 rounded-lg p-1 gap-2">
                         <button
                             type="button"
                             onClick={() => setAutoAdd(true)}
-                            className={`flex-1 text-sm py-1 rounded transition-colors ${autoAdd ? 'bg-emerald-500/20 text-emerald-500' : 'text-gray-400 hover:bg-gray-700'}`}
+                            className={`flex-1 text-[10px] font-bold py-2 rounded-md transition-all border ${autoAdd ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.1)]' : 'bg-transparent border-gray-700 text-gray-400 hover:border-gray-600'}`}
                         >
-                            Auto-Add
+                            AUTO-ADD: ON
                         </button>
                         <button
                             type="button"
                             onClick={() => setAutoAdd(false)}
-                            className={`flex-1 text-sm py-1 rounded transition-colors ${!autoAdd ? 'bg-orange-500/20 text-orange-500' : 'text-gray-400 hover:bg-gray-700'}`}
+                            className={`flex-1 text-[10px] font-bold py-2 rounded-md transition-all border ${!autoAdd ? 'bg-gray-700 border-gray-600 text-white' : 'bg-transparent border-gray-700 text-gray-400 hover:border-gray-600'}`}
                         >
-                            Manual
+                            AUTO-ADD: OFF
                         </button>
                     </div>
                     <p className="text-[10px] text-gray-500 mt-1">

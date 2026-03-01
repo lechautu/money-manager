@@ -2,19 +2,20 @@ import { useState, useEffect } from 'react';
 import { RecurringService } from '../services/RecurringService';
 import type { RecurringRule } from '../services/RecurringService';
 import { RecurringForm } from '../components/recurring/RecurringForm';
-import { Plus, Edit, Trash, Calendar, RefreshCw, AlertTriangle, Zap, Hand } from 'lucide-react';
+import { Plus, Edit, Trash, Calendar, RefreshCw, AlertTriangle } from 'lucide-react';
 import { CategoryService } from '../services/CategoryService';
 import { AccountService } from '../services/AccountService';
 import { useToast } from '../components/common/Toast';
-import { isAfter, format, parseISO } from 'date-fns';
+import { format, parseISO, addDays, addWeeks, addMonths, addYears } from 'date-fns';
 import { formatDisplayDate } from '../utils/dateUtils';
 
 export default function RecurringPage() {
     const [rules, setRules] = useState<RecurringRule[]>([]);
-    const [instances, setInstances] = useState<Record<string, string[]>>({}); // rule_id -> [dates]
+    const [instances, setInstances] = useState<Record<string, any[]>>({}); // rule_id -> [instances]
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingRule, setEditingRule] = useState<RecurringRule | null>(null);
     const [loading, setLoading] = useState(true);
+    const [pendingCount, setPendingCount] = useState(0);
 
     // Helpers for display names
     const [catNames, setCatNames] = useState<Record<string, string>>({});
@@ -27,13 +28,15 @@ export default function RecurringPage() {
 
     const loadData = async () => {
         setLoading(true);
-        const [r, c, a, inst] = await Promise.all([
+        const [r, c, a, inst, pc] = await Promise.all([
             RecurringService.getAll(),
             CategoryService.getAll(),
             AccountService.getAll(),
-            RecurringService.getAllInstances()
+            RecurringService.getAllInstances(),
+            RecurringService.getPendingCount()
         ]);
         setRules(r);
+        setPendingCount(pc);
 
         const cm: Record<string, string> = {};
         c.forEach((cat: any) => cm[cat.id] = cat.name);
@@ -43,14 +46,25 @@ export default function RecurringPage() {
         a.forEach((acc: any) => am[acc.id] = acc.name);
         setAccNames(am);
 
-        const instMap: Record<string, string[]> = {};
+        const instMap: Record<string, any[]> = {};
         inst.forEach((i: any) => {
             if (!instMap[i.rule_id]) instMap[i.rule_id] = [];
-            instMap[i.rule_id].push(i.date);
+            instMap[i.rule_id].push(i);
         });
         setInstances(instMap);
 
         setLoading(false);
+        window.dispatchEvent(new CustomEvent('refresh-recurring-count'));
+    };
+
+    const getPendingInstance = (rule: RecurringRule) => {
+        if (rule.auto_add === 1) return null;
+        const ruleInst = instances[rule.id] || [];
+        // Find the oldest pending instance
+        const pending = ruleInst
+            .filter(i => i.generated_transaction_id === null)
+            .sort((a, b) => a.date.localeCompare(b.date))[0];
+        return pending || null;
     };
 
     const handleToggleAuto = async (rule: RecurringRule) => {
@@ -74,20 +88,39 @@ export default function RecurringPage() {
     };
 
     const isDue = (rule: RecurringRule) => {
-        const today = format(new Date(), 'yyyy-MM-dd');
-        // Check if there should be an instance today or in the past that isn't in instances[rule.id]
-        // This is a simplified check: is start_date <= today AND no instance exists yet for the "current" expected date
-        // For accurate due check, we'd need to simulate the sequence.
-        // Let's just check if start_date <= today and no instances exist at all OR last instance is old.
+        if (rule.auto_add === 1) return false;
+
+        // Find if there are any expected dates up to today that are MISSING from instances
         const ruleInst = instances[rule.id] || [];
-        if (ruleInst.includes(today)) return false;
+        const instanceDates = ruleInst.map(i => i.date);
+        const today = format(new Date(), 'yyyy-MM-dd');
 
-        // If start date is in future, not due
-        if (isAfter(parseISO(rule.start_date), new Date())) return false;
+        let currentDate = rule.start_date;
+        const endDate = rule.end_date || today;
 
-        // If it's a manual rule and no instance for "today", show warning?
-        // Actually, let's just show if it's due today.
-        return true;
+        let count = 0;
+        let safety = 0;
+        while (currentDate <= endDate && currentDate <= today && safety < 100) {
+            if (!instanceDates.includes(currentDate)) return true;
+
+            // Advance
+            const d = parseISO(currentDate);
+            let next: Date;
+            switch (rule.frequency) {
+                case 'daily': next = addDays(d, 1); break;
+                case 'weekly': next = addWeeks(d, 1); break;
+                case 'biweekly': next = addWeeks(d, 2); break;
+                case 'monthly': next = addMonths(d, 1); break;
+                case 'quarterly': next = addMonths(d, 3); break;
+                case 'yearly': next = addYears(d, 1); break;
+                default: next = addMonths(d, 1);
+            }
+            currentDate = format(next, 'yyyy-MM-dd');
+            safety++;
+            count++;
+            if (rule.max_instances && count >= rule.max_instances) break;
+        }
+        return false;
     };
 
     const handleEdit = (rule: RecurringRule) => {
@@ -135,11 +168,25 @@ export default function RecurringPage() {
                 </button>
             </div>
 
+            {pendingCount > 0 && (
+                <div className="bg-orange-900/40 border border-orange-900/60 p-4 rounded-lg flex items-center gap-4 text-orange-200 shadow-lg animate-in fade-in slide-in-from-top-4 duration-300">
+                    <div className="bg-orange-600 p-2 rounded-full">
+                        <AlertTriangle className="text-white" size={20} />
+                    </div>
+                    <div className="flex-1">
+                        <p className="font-bold text-sm">Action Required</p>
+                        <p className="text-xs opacity-90">You have {pendingCount} manual recurring transaction(s) due or overdue. Please process them to record the transactions.</p>
+                    </div>
+                </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {rules.map(rule => {
-                    const due = rule.auto_add === 0 && isDue(rule);
                     const ruleInst = instances[rule.id] || [];
+                    const pendingInstance = getPendingInstance(rule);
+                    const due = rule.auto_add === 0 && (pendingInstance !== null || isDue(rule));
                     const nextDate = RecurringService.getNextOccurrence(rule, ruleInst);
+                    const displayDueDate = pendingInstance ? pendingInstance.date : nextDate;
 
                     return (
                         <div key={rule.id} className={`bg-gray-900 border ${due ? 'border-orange-500 ring-1 ring-orange-500/50' : 'border-gray-800'} rounded-xl p-4 relative group transition-all`}>
@@ -154,10 +201,14 @@ export default function RecurringPage() {
                                     <div className="font-semibold text-lg text-white">{rule.name}</div>
                                     <button
                                         onClick={() => handleToggleAuto(rule)}
-                                        className={`flex items-center gap-1 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded mt-1 transition-colors ${rule.auto_add === 1 ? 'bg-primary/20 text-primary hover:bg-primary/30' : 'bg-gray-800 text-gray-500 hover:bg-gray-700'}`}
+                                        className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider transition-colors border mt-1 ${rule.auto_add === 1
+                                            ? 'bg-emerald-500/20 text-emerald-500 border-emerald-500/30'
+                                            : 'bg-gray-800 text-white border-gray-700 hover:bg-gray-700'
+                                            }`}
+                                        title={rule.auto_add === 1 ? "Click to disable Auto-Add" : "Click to enable Auto-Add"}
                                     >
-                                        {rule.auto_add === 1 ? <Zap size={10} /> : <Hand size={10} />}
-                                        {rule.auto_add === 1 ? 'Auto-Add' : 'Manual'}
+                                        <div className={`w-1.5 h-1.5 rounded-full ${rule.auto_add === 1 ? 'bg-emerald-500 animate-pulse' : 'bg-gray-400'}`} />
+                                        {rule.auto_add === 1 ? 'AUTO-ADD: ON' : 'AUTO-ADD: OFF'}
                                     </button>
                                 </div>
                                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -210,19 +261,24 @@ export default function RecurringPage() {
                                 </div>
 
                                 {due && (
-                                    <div className="mt-4 pt-4 border-t border-gray-800 flex gap-2">
-                                        <button
-                                            onClick={() => handleManualAdd(rule, format(new Date(), 'yyyy-MM-dd'))}
-                                            className="flex-1 flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold py-2 rounded transition-colors"
-                                        >
-                                            <Plus size={14} /> Add Today
-                                        </button>
-                                        <button
-                                            onClick={() => showToast('Feature coming soon: Skip Instance')}
-                                            className="px-3 border border-gray-700 hover:border-gray-500 text-gray-400 py-2 rounded text-xs"
-                                        >
-                                            Skip
-                                        </button>
+                                    <div className="mt-4 pt-4 border-t border-gray-800 flex flex-col gap-2">
+                                        <p className="text-[10px] text-orange-400 font-bold uppercase tracking-wider">
+                                            {pendingInstance ? 'Pending Transaction' : 'Next Due'}
+                                        </p>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => handleManualAdd(rule, displayDueDate || format(new Date(), 'yyyy-MM-dd'))}
+                                                className="flex-1 flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold py-2 rounded transition-colors"
+                                            >
+                                                <Plus size={14} /> {pendingInstance ? `Process ${formatDate(displayDueDate!)}` : `Add Today`}
+                                            </button>
+                                            <button
+                                                onClick={() => showToast('Feature coming soon: Skip Instance')}
+                                                className="px-3 border border-gray-700 hover:border-gray-500 text-gray-400 py-2 rounded text-xs"
+                                            >
+                                                Skip
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
                             </div>

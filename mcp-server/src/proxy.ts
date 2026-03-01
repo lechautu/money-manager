@@ -3,6 +3,7 @@ import { log } from './logger.js';
 
 const MM_API_BASE_URL = process.env.MM_API_BASE_URL || 'http://localhost:3200';
 const REQUEST_TIMEOUT_MS = parseInt(process.env.REQUEST_TIMEOUT_MS || '30000', 10);
+const GATEWAY_INTERNAL_TOKEN = process.env.GATEWAY_INTERNAL_TOKEN || '';
 
 export interface ProxyContext {
     userId: string;
@@ -25,6 +26,11 @@ export async function executeToolViaGateway(
         'x-user-id': context.userId,
         'x-request-id': requestId,
     };
+
+    // Service-to-service auth: X-Internal-Token (security contract v3)
+    if (GATEWAY_INTERNAL_TOKEN) {
+        headers['x-internal-token'] = GATEWAY_INTERNAL_TOKEN;
+    }
 
     if (context.idempotencyKey) {
         headers['idempotency-key'] = context.idempotencyKey;

@@ -60,10 +60,11 @@ export const RecurringService = {
         await ToolExecutionService.executeTool('trigger_recurring_instance', { ruleId, date });
     },
 
-    getNextOccurrence(rule: RecurringRule, generatedDates: string[]): string | null {
+    getNextOccurrence(rule: RecurringRule, instances: any[]): string | null {
         let current = parseISO(rule.start_date);
         const endDateLimit = rule.end_date ? parseISO(rule.end_date) : null;
-        const totalGenerated = generatedDates.length;
+        const totalGenerated = instances.length;
+        const generatedDates = instances.map(i => i.date);
 
         if (rule.max_instances && totalGenerated >= rule.max_instances) return null;
 
@@ -89,5 +90,14 @@ export const RecurringService = {
             case 'yearly': return addYears(date, 1);
             default: return addMonths(date, 1);
         }
+    },
+
+    async getPendingCount(): Promise<number> {
+        const res = await ToolExecutionService.executeTool('get_pending_recurring_count', {});
+        return res.data.count;
+    },
+
+    async linkTransaction(ruleId: string, transactionId: string, date?: string): Promise<void> {
+        await ToolExecutionService.executeTool('link_recurring_transaction', { ruleId, transactionId, date });
     }
 };

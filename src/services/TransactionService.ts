@@ -24,6 +24,9 @@ export interface Transaction {
     account_name?: string;
     to_account_name?: string;
     currency?: string;
+    recurring_name?: string;
+    installment_plan_name?: string;
+    installment_period?: string;
 }
 
 export interface TransactionSplit {
@@ -71,7 +74,7 @@ export const TransactionService = {
         await ToolExecutionService.executeTool('update_transaction', { id, ...tx });
     },
 
-    async transfer(fromAccountId: string, toAccountId: string, amount: number, date: string, categoryId: string, subCategoryId: string | undefined, note?: string): Promise<Transaction> {
+    async transfer(fromAccountId: string, toAccountId: string, amount: number, date: string, categoryId?: string, subCategoryId?: string, note?: string): Promise<Transaction> {
         const res = await ToolExecutionService.executeTool('transfer_funds', {
             fromAccountId, toAccountId, amount, date, categoryId, subCategoryId, note
         });

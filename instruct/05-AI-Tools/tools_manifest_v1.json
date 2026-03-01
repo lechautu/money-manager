@@ -368,6 +368,31 @@
             "tier": 1
         },
         {
+            "name": "link_recurring_transaction",
+            "category": "Recurring",
+            "description": "Liên kết một giao dịch thủ công có sẵn với một quy tắc Recurring.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ruleId": {
+                        "type": "string"
+                    },
+                    "transactionId": {
+                        "type": "string"
+                    },
+                    "date": {
+                        "type": "string",
+                        "format": "date"
+                    }
+                },
+                "required": [
+                    "ruleId",
+                    "transactionId"
+                ]
+            },
+            "tier": 1
+        },
+        {
             "name": "create_installment_plan",
             "category": "Installments",
             "description": "Tạo kế hoạch trả góp với lịch thanh toán tự động.",
@@ -441,6 +466,35 @@
                 "required": [
                     "paymentId",
                     "transactionId"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "link_installment_transaction",
+            "category": "Installments",
+            "description": "Liên kết một giao dịch thủ công với một kỳ trả góp (có thể là giao dịch chi phí ban đầu hoặc giao dịch trả nợ hàng tháng).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "paymentId": {
+                        "type": "string"
+                    },
+                    "transactionId": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "expense",
+                            "payment"
+                        ]
+                    }
+                },
+                "required": [
+                    "paymentId",
+                    "transactionId",
+                    "type"
                 ]
             },
             "tier": 1
@@ -890,6 +944,13 @@
             "tier": 1
         },
         {
+            "name": "get_pending_recurring_count",
+            "category": "Recurring",
+            "description": "Lấy số lượng các giao dịch định kỳ đã đến hạn nhưng chưa được thực hiện (manual).",
+            "parameters": {},
+            "tier": 1
+        },
+        {
             "name": "get_installment_plans",
             "category": "Installments",
             "description": "Xem danh sách các kế hoạch trả góp.",
@@ -918,6 +979,37 @@
             "category": "Installments",
             "description": "Cập nhật trạng thái các kỳ trả góp quá hạn hoặc đến hạn.",
             "parameters": {},
+            "tier": 1
+        },
+        {
+            "name": "get_pending_installment_count",
+            "category": "Installments",
+            "description": "Lấy số lượng các kỳ trả góp đang đến hạn hoặc quá hạn chưa thanh toán.",
+            "parameters": {},
+            "tier": 1
+        },
+        {
+            "name": "update_installment_plan",
+            "category": "Installments",
+            "description": "Cập nhật thông tin của một kế hoạch trả góp.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "auto_add": {
+                        "type": "integer",
+                        "enum": [
+                            0,
+                            1
+                        ]
+                    }
+                },
+                "required": [
+                    "id"
+                ]
+            },
             "tier": 1
         },
         {

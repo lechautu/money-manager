@@ -125,12 +125,12 @@ export const StatisticsService = {
         const todayStr = new Date().toISOString().substring(0, 10);
         const currentMonthStr = todayStr.substring(0, 7);
 
-        // 1. Starting Balance (Actual NOW)
+        // 1. Starting Balance (Effective Balance: Posted + Pending)
         const accounts = all('SELECT initial_balance FROM accounts');
-        const transactionsPosted = get<any>(
-            "SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE deleted_at IS NULL AND status = 'posted'"
+        const transactionsTotal = get<any>(
+            "SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE deleted_at IS NULL AND status != 'ignored'"
         );
-        let startBalanceNow = accounts.reduce((sum: number, a: any) => sum + (a.initial_balance || 0), 0) + (transactionsPosted?.total || 0);
+        let startBalanceNow = accounts.reduce((sum: number, a: any) => sum + (a.initial_balance || 0), 0) + (transactionsTotal?.total || 0);
 
         // 2. Current Month Actuals (Transactions already in DB for this month)
         const currentMonthActuals = get<any>(
@@ -143,26 +143,15 @@ export const StatisticsService = {
         );
 
         // 3. Variable Spending Baseline (Average of manual/non-automated spending)
-        const manualHistory = all(
-            `SELECT 
-                COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) as total_income,
-                COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) as total_expense,
-                COUNT(DISTINCT month) as month_count
-             FROM transactions 
-             WHERE source NOT IN ('recurring', 'installment', 'transfer') 
-             AND deleted_at IS NULL AND status != 'ignored'
-             AND month >= ? AND month < ?`, [getNMonthsAgo(6), currentMonthStr]
-        );
-        const activeMonths = Math.max(1, manualHistory[0]?.month_count || 1);
-        const avgManualIncome = (manualHistory[0]?.total_income || 0) / activeMonths;
-        const avgManualExpense = (manualHistory[0]?.total_expense || 0) / activeMonths;
+        const avgManualIncome = 0;
+        const avgManualExpense = 0;
 
         // 4. Data Components
         const recurringRules = all('SELECT * FROM recurring_rules WHERE is_active = 1');
-        const unpaidInstallments = all('SELECT * FROM installment_payments WHERE status != "paid"');
+        const unpaidInstallments = all('SELECT * FROM installment_payments WHERE status != "paid" AND expense_transaction_id IS NULL AND linked_transaction_id IS NULL AND generated_transaction_id IS NULL');
 
-        // Fetch all current/future transactions linked to recurring to avoid double counting
-        const existingRecurringTxs = all('SELECT source_ref_id, date FROM transactions WHERE source = "recurring" AND date >= ?', [currentMonthStr + '-01']);
+        // Fetch all current/future transactions to avoid double counting
+        const existingTxs = all('SELECT source, source_ref_id, date, category_id, sub_category_id, amount FROM transactions WHERE date >= ? AND deleted_at IS NULL AND status != "ignored"', [currentMonthStr + '-01']);
 
         // Track rule instance counts for max_instances limit
         const ruleInstanceCounts: Record<string, number> = {};
@@ -202,14 +191,26 @@ export const StatisticsService = {
                     // Check max_instances (if rule has a limit)
                     if (rule.max_instances && ruleInstanceCounts[rule.id] >= rule.max_instances) continue;
 
-                    // Skip if a transaction for this specific rule and date already exists (means it's already in Actuals/Balance)
-                    const txExists = existingRecurringTxs.some((tx: any) => tx.source_ref_id === rule.id && tx.date === date);
-                    if (txExists) {
-                        // Already accounted for, but we still increment instance count if we are simulating history
-                        // but here we only increment if we ARE adding it to projection
-                    } else {
+                    // Check if a transaction already exists for this rule and date
+                    // 1. Direct link (source_ref_id)
+                    // 2. Or any transaction in the same month with same category and amount (handles day shifts and unlinked plans)
+                    const txExists = existingTxs.some((tx: any) => {
+                        // Direct link match
+                        if (tx.source_ref_id === rule.id && (rule.frequency === 'monthly' ? tx.date.startsWith(monthStr) : tx.date === date)) return true;
+
+                        // Fuzzy match (Monthly plans only to avoid false matches on daily/weekly rules)
+                        if (rule.frequency === 'monthly' || rule.frequency === 'quarterly' || rule.frequency === 'yearly') {
+                            return tx.date.startsWith(monthStr) && tx.category_id === rule.category_id && Math.abs(tx.amount) === Math.abs(rule.amount);
+                        }
+
+                        // Exact date match for daily/weekly
+                        return tx.date === date && tx.category_id === rule.category_id && Math.abs(tx.amount) === Math.abs(rule.amount);
+                    });
+
+                    if (!txExists) {
                         // Past dates in current month that HAVE NO transaction are skipped (missed opportunities)
-                        if (monthStr === currentMonthStr && date < todayStr) continue;
+                        // This prevents projecting "ghost" expenses for days that already passed without action
+                        if (monthStr === currentMonthStr && date <= todayStr) continue;
 
                         // Add to projection
                         if (rule.type === 'income') projIncome += Math.abs(rule.amount);
@@ -222,7 +223,19 @@ export const StatisticsService = {
 
             // --- C. Installments ---
             const monthlyInst = unpaidInstallments
-                .filter((p: any) => p.due_month === monthStr)
+                .filter((p: any) => {
+                    if (p.due_month !== monthStr) return false;
+
+                    // Smart check: Skip if a manual transaction exists with same category and amount for this installment (due month matches)
+                    // Note: installments are already filtered by expense_transaction_id IS NULL in the earlier query
+                    const plan = all('SELECT payment_category_id FROM installment_plans WHERE id = ?', [p.plan_id])[0];
+                    const exists = existingTxs.some((tx: any) =>
+                        tx.date.startsWith(monthStr) &&
+                        tx.category_id === plan?.payment_category_id &&
+                        Math.abs(tx.amount) === Math.abs(p.amount)
+                    );
+                    return !exists;
+                })
                 .reduce((sum: number, p: any) => sum + Math.abs(p.amount), 0);
             projExpense += monthlyInst;
 
@@ -244,13 +257,146 @@ export const StatisticsService = {
         return points;
     },
 
-    getForecastDetails(_targetMonthStr: string) {
+    getForecastDetails(targetMonthStr: string) {
+        const todayStr = new Date().toISOString().substring(0, 10);
+        const currentMonthStr = todayStr.substring(0, 7);
+        const isFuture = targetMonthStr > currentMonthStr;
+        const isPast = targetMonthStr < currentMonthStr;
+
+        // 1. Fetch All Relevant Data (with category names)
+        const recurringRules = all(`
+            SELECT r.*, c.name as category_name, sc.name as sub_category_name
+            FROM recurring_rules r
+            LEFT JOIN categories c ON r.category_id = c.id
+            LEFT JOIN sub_categories sc ON r.sub_category_id = sc.id
+            WHERE r.is_active = 1
+        `);
+
+        const installments = all(`
+            SELECT p.*, pl.name as plan_name, pl.tenor_months,
+                   c.name as category_name, sc.name as sub_category_name,
+                   (SELECT COUNT(*) FROM installment_payments p2 WHERE p2.plan_id = p.plan_id AND p2.due_date <= p.due_date) as period_num
+            FROM installment_payments p
+            JOIN installment_plans pl ON p.plan_id = pl.id
+            LEFT JOIN categories c ON pl.payment_category_id = c.id
+            LEFT JOIN sub_categories sc ON pl.payment_sub_category_id = sc.id
+            WHERE p.due_month = ?
+        `, [targetMonthStr]);
+
+        const transactions = all(`
+            SELECT t.*, c.name as category_name, sc.name as sub_category_name
+            FROM transactions t
+            LEFT JOIN categories c ON t.category_id = c.id
+            LEFT JOIN sub_categories sc ON t.sub_category_id = sc.id
+            WHERE t.month = ? AND t.deleted_at IS NULL AND t.status != 'ignored' AND t.source != 'transfer'
+        `, [targetMonthStr]);
+
+        // 2. Prepare Breakdown
+        const incomeLineItems: any[] = [];
+        const expenseLineItems: any[] = [];
+
+        // --- Track handled source IDs to avoid double counting ---
+        const handledRefs = new Set();
+
+        // --- A. Process Recurring Rules ---
+        for (const rule of recurringRules as any[]) {
+            if (rule.type === 'transfer') continue; // Exclude internal transfers
+
+            const dates = getRecurringDatesInMonth(rule, targetMonthStr);
+            for (const date of dates) {
+                // Find matching transaction
+                const match = transactions.find((tx: any) =>
+                    (tx.source === 'recurring' && tx.source_ref_id === rule.id && (rule.frequency === 'monthly' ? true : tx.date === date)) ||
+                    (tx.category_id === rule.category_id && Math.abs(tx.amount) === Math.abs(rule.amount) && (rule.frequency === 'monthly' ? true : tx.date === date))
+                );
+
+                // Determine category name
+                let categoryFull = rule.category_name || 'Uncategorized';
+                if (rule.sub_category_name) {
+                    categoryFull = `${rule.category_name} - ${rule.sub_category_name}`;
+                }
+
+                const item = {
+                    id: match?.id || `${rule.id}-${date}`,
+                    name: rule.name || 'Recurring',
+                    date: match?.date || date,
+                    amount: Math.abs(rule.amount),
+                    categoryName: categoryFull,
+                    status: match ? 'posted' : (date <= todayStr && !isFuture ? 'missed' : 'projected'),
+                    type: 'recurring',
+                    txId: match?.id
+                };
+
+                if (match) handledRefs.add(match.id);
+
+                if (rule.type === 'income') incomeLineItems.push(item);
+                else expenseLineItems.push(item);
+            }
+        }
+
+        // --- B. Process Installments ---
+        for (const p of installments as any[]) {
+            const match = transactions.find((tx: any) =>
+                (tx.source === 'installment' && tx.source_ref_id === p.id) ||
+                (tx.id === p.linked_transaction_id || tx.id === p.generated_transaction_id)
+            );
+
+            // Determine category name
+            let categoryFull = p.category_name || 'Uncategorized';
+            if (p.sub_category_name) {
+                categoryFull = `${p.category_name} - ${p.sub_category_name}`;
+            }
+
+            const item = {
+                id: match?.id || p.id,
+                name: p.plan_name || 'Installment',
+                date: p.due_date,
+                amount: Math.abs(p.amount),
+                categoryName: categoryFull,
+                status: (p.status === 'paid' || match) ? 'posted' : (p.due_date <= todayStr && !isFuture ? 'overdue' : 'projected'),
+                type: 'installment',
+                txId: match?.id,
+                meta: { current: p.period_num, total: p.tenor_months }
+            };
+
+            if (match) handledRefs.add(match.id);
+            expenseLineItems.push(item);
+        }
+
+        // --- C. Remaining Transactions (Manual / Others) ---
+        const manualTxs = (transactions as any[]).filter(tx => !handledRefs.has(tx.id));
+        for (const tx of manualTxs) {
+            // Determine category name
+            let categoryFull = tx.category_name || 'Uncategorized';
+            if (tx.sub_category_name) {
+                categoryFull = `${tx.category_name} - ${tx.sub_category_name}`;
+            }
+
+            const item = {
+                id: tx.id,
+                name: tx.note || 'Transaction',
+                date: tx.date,
+                amount: Math.abs(tx.amount),
+                categoryName: categoryFull,
+                status: tx.status,
+                type: 'manual',
+                txId: tx.id
+            };
+            if (tx.amount > 0) incomeLineItems.push(item);
+            else expenseLineItems.push(item);
+        }
+
+
         return {
-            month: _targetMonthStr,
-            openingBalance: 0,
-            closingBalance: 0,
-            income: { total: 0, items: [] },
-            expense: { total: 0, items: [] }
+            month: targetMonthStr,
+            income: {
+                total: incomeLineItems.reduce((s, i) => s + i.amount, 0),
+                items: incomeLineItems.sort((a, b) => a.date.localeCompare(b.date))
+            },
+            expense: {
+                total: expenseLineItems.reduce((s, i) => s + i.amount, 0),
+                items: expenseLineItems.sort((a, b) => a.date.localeCompare(b.date))
+            }
         };
     },
 };

@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS installment_plans (
     payment_category_id TEXT REFERENCES categories(id),
     payment_sub_category_id TEXT REFERENCES sub_categories(id),
     notify_before_days INTEGER DEFAULT 3,
+    auto_add INTEGER DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -110,7 +111,8 @@ CREATE TABLE IF NOT EXISTS installment_payments (
     status TEXT NOT NULL DEFAULT 'upcoming' CHECK(status IN ('upcoming','due','overdue','paid')),
     paid_at TEXT,
     linked_transaction_id TEXT UNIQUE REFERENCES transactions(id),
-    generated_transaction_id TEXT REFERENCES transactions(id)
+    generated_transaction_id TEXT REFERENCES transactions(id),
+    expense_transaction_id TEXT REFERENCES transactions(id)
 );
 
 CREATE TABLE IF NOT EXISTS budgets (

@@ -18,27 +18,16 @@ export const ToolExecutionService = {
             throw new Error(`Tool '${name}' is not found in the manifest.`);
         }
 
-        // Force Gateway Configuration
+        // Gateway Configuration (no JWT needed — security contract v3)
         if (!options.remoteConfig) {
             options.remoteConfig = {
                 baseUrl: localStorage.getItem('mm2_gateway_url') || 'http://localhost:3200',
-                authToken: localStorage.getItem('mm2_gateway_token') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzEyMyIsImlhdCI6MTc3MjI2NzEzMywiZXhwIjoxODAzODAzMTMzfQ.bZUaF5-wQSmN0A77CpljiKd-H6Roz-Ha2RXErN8gtg0',
                 approvalToken: 'approved'
             };
         }
 
         try {
-            // ALWAYS proxy to Gateway - No local fallback
-            try {
-                return await GatewayClient.callTool(name, parameters, options.remoteConfig);
-            } catch (err: any) {
-                // If the token in localStorage is invalid/expired, clear it (it might be an old session token)
-                if (err.message.includes('token') && localStorage.getItem('mm2_gateway_token')) {
-                    console.warn('[ToolExecution] Gateway token looks invalid. Clearing from localStorage.');
-                    localStorage.removeItem('mm2_gateway_token');
-                }
-                throw err;
-            }
+            return await GatewayClient.callTool(name, parameters, options.remoteConfig);
         } catch (error: any) {
             console.error(`Error executing tool [${name}] via Gateway:`, error);
             return { status: 'error', message: error.message };

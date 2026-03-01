@@ -2,6 +2,16 @@
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
+## Security — Localhost-Only Architecture
+
+> [!IMPORTANT]
+> The Tool Gateway is designed for **localhost-only** usage. It binds to `127.0.0.1` by default and is NOT intended to be exposed to LAN or WAN networks.
+
+> [!WARNING]
+> **Port-Forwarding Risk Acceptance**: If you intentionally expose localhost services (e.g., via SSH tunnel, reverse proxy, or router port-forwarding), you assume full responsibility for securing access. The application does not attempt to prevent misuse in this configuration.
+
+See [`instruct/06-security/security_local_host.md`](instruct/06-security/security_local_host.md) for the full security contract.
+
 Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh

@@ -40,6 +40,9 @@ export const RecurringService = {
 
     delete(id: string) {
         transaction(() => {
+            // Unlink transactions
+            run("UPDATE transactions SET source = 'manual', source_ref_id = NULL WHERE source = 'recurring' AND source_ref_id = ?", [id]);
+
             run('DELETE FROM recurring_instances WHERE rule_id = ?', [id]);
             run('DELETE FROM recurring_rules WHERE id = ?', [id]);
         });
@@ -66,6 +69,8 @@ export const RecurringService = {
         if (!rule) throw new Error('Rule not found');
 
         const today = new Date().toISOString().substring(0, 10);
+        console.log(`[CHECK] Generating instances for rule: ${rule.name} (Start: ${rule.start_date}, Today: ${today})`);
+
         const existingDates = new Set(
             all<any>('SELECT date FROM recurring_instances WHERE rule_id = ?', [ruleId]).map((r: any) => r.date)
         );
@@ -79,16 +84,30 @@ export const RecurringService = {
                 const instanceId = uuidv4();
                 let txId: string | null = null;
 
-                if (rule.auto_add) {
+                const amount = rule.type === 'expense' ? -Math.abs(rule.amount) : Math.abs(rule.amount);
+
+                // Smart Check: Avoid auto-adding if a transaction already exists on that day with same amount/category
+                const matchedTx = get<any>(
+                    "SELECT id FROM transactions WHERE date = ? AND category_id = ? AND amount = ? AND deleted_at IS NULL",
+                    [currentDate, rule.category_id || null, amount]
+                );
+
+                if (matchedTx) {
+                    console.log(`[CHECK] Transaction already exists for ${rule.name} on ${currentDate}. Linking instead of adding new.`);
+                    txId = matchedTx.id;
+                    run("UPDATE transactions SET source = 'recurring', source_ref_id = ?, note = COALESCE(note, ?) WHERE id = ?",
+                        [ruleId, `Recurring: ${rule.name || rule.id}`, txId]);
+                } else if (rule.auto_add) {
                     txId = uuidv4();
                     const now = new Date().toISOString();
                     const month = currentDate.substring(0, 7);
-                    const amount = rule.type === 'expense' ? -Math.abs(rule.amount) : Math.abs(rule.amount);
+
+                    console.log(`[ACTION] Auto-adding transaction for recurring rule: ${rule.name} on ${currentDate}`);
 
                     run(
-                        `INSERT INTO transactions (id, account_id, to_account_id, date, month, amount, category_id, sub_category_id, status, source, source_ref_id, created_at, updated_at)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'recurring', ?, ?, ?)`,
-                        [txId, rule.account_id, rule.to_account_id || null, currentDate, month, amount, rule.category_id || null, rule.sub_category_id || null, rule.default_status || 'posted', ruleId, now, now]
+                        `INSERT INTO transactions (id, account_id, to_account_id, date, month, amount, category_id, sub_category_id, status, source, source_ref_id, note, created_at, updated_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'recurring', ?, ?, ?, ?)`,
+                        [txId, rule.account_id, rule.to_account_id || null, currentDate, month, amount, rule.category_id || null, rule.sub_category_id || null, rule.default_status || 'posted', ruleId, `Recurring: ${rule.name || rule.id}`, now, now]
                     );
                 }
 
@@ -102,6 +121,8 @@ export const RecurringService = {
 
             if (rule.max_instances && (existingDates.size + generated) >= rule.max_instances) break;
         }
+
+        if (generated > 0) console.log(`[CHECK] Generated ${generated} instances for ${rule.name}`);
         return { generated };
     },
 
@@ -115,9 +136,9 @@ export const RecurringService = {
         const amount = rule.type === 'expense' ? -Math.abs(rule.amount) : Math.abs(rule.amount);
 
         run(
-            `INSERT INTO transactions (id, account_id, to_account_id, date, month, amount, category_id, sub_category_id, status, source, source_ref_id, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'recurring', ?, ?, ?)`,
-            [txId, rule.account_id, rule.to_account_id || null, date, month, amount, rule.category_id || null, rule.sub_category_id || null, rule.default_status || 'posted', ruleId, now, now]
+            `INSERT INTO transactions (id, account_id, to_account_id, date, month, amount, category_id, sub_category_id, status, source, source_ref_id, note, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'recurring', ?, ?, ?, ?)`,
+            [txId, rule.account_id, rule.to_account_id || null, date, month, amount, rule.category_id || null, rule.sub_category_id || null, rule.default_status || 'posted', ruleId, `Recurring: ${rule.name || rule.id}`, now, now]
         );
 
         const instanceId = uuidv4();
@@ -126,6 +147,32 @@ export const RecurringService = {
 
         return get('SELECT * FROM transactions WHERE id = ?', [txId]);
     },
+
+    getPendingCount() {
+        const result = get<any>("SELECT COUNT(*) as count FROM recurring_instances WHERE generated_transaction_id IS NULL");
+        return result?.count || 0;
+    },
+
+    linkTransaction(ruleId: string, transactionId: string, date: string) {
+        return transaction(() => {
+            const rule = get<any>('SELECT * FROM recurring_rules WHERE id = ?', [ruleId]);
+            if (!rule) throw new Error('Rule not found');
+
+            const tx = get<any>('SELECT * FROM transactions WHERE id = ?', [transactionId]);
+            if (!tx) throw new Error('Transaction not found');
+
+            // Update transaction
+            run("UPDATE transactions SET source = 'recurring', source_ref_id = ?, note = COALESCE(note, ?) WHERE id = ?",
+                [ruleId, `Recurring: ${rule.name || rule.id}`, transactionId]);
+
+            // Track instance
+            const instanceId = uuidv4();
+            run('INSERT OR REPLACE INTO recurring_instances (id, rule_id, date, generated_transaction_id, created_at) VALUES (?, ?, ?, ?, ?)',
+                [instanceId, ruleId, date || tx.date, transactionId, new Date().toISOString()]);
+
+            return { success: true };
+        });
+    }
 };
 
 function advanceDate(dateStr: string, frequency: string): string {

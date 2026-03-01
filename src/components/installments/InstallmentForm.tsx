@@ -24,9 +24,10 @@ export function InstallmentForm({ isOpen, onClose, onSuccess }: InstallmentFormP
     const [categoryId, setCategoryId] = useState('');
     const [subCategoryId, setSubCategoryId] = useState('');
 
-    const [creditAccounts, setCreditAccounts] = useState<Account[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
+    const [autoAdd, setAutoAdd] = useState(false);
+    const [allAccounts, setAllAccounts] = useState<Account[]>([]);
 
     const [loading, setLoading] = useState(false);
     const { showToast } = useToast();
@@ -39,6 +40,7 @@ export function InstallmentForm({ isOpen, onClose, onSuccess }: InstallmentFormP
             setTotalAmount('');
             setTenor(6);
             setStartDate(new Date().toISOString().split('T')[0]);
+            setAutoAdd(false);
         }
     }, [isOpen]);
 
@@ -56,13 +58,10 @@ export function InstallmentForm({ isOpen, onClose, onSuccess }: InstallmentFormP
             AccountService.getAll(),
             CategoryService.getAll()
         ]);
-        // Filter for credit accounts (assuming 'credit' type exists, or just allow all)
-        // Schema has type CHECK(type IN ('bank','credit','debit'))
-        const credits = accs.filter(a => a.type === 'credit');
-        setCreditAccounts(credits);
         setCategories(cats);
+        setAllAccounts(accs);
 
-        if (credits.length > 0) setCreditAccountId(credits[0].id);
+        if (accs.length > 0) setCreditAccountId(accs[0].id);
         if (cats.length > 0) setCategoryId(cats[0].id);
     };
 
@@ -79,7 +78,7 @@ export function InstallmentForm({ isOpen, onClose, onSuccess }: InstallmentFormP
                 notify_before_days: 0,
                 payment_category_id: categoryId,
                 payment_sub_category_id: subCategoryId || undefined,
-                payment_source_account_id: undefined // Optional, user can set later? Or add to form?
+                auto_add: autoAdd
             };
 
             await InstallmentService.create(payload);
@@ -136,20 +135,16 @@ export function InstallmentForm({ isOpen, onClose, onSuccess }: InstallmentFormP
                         />
                     </div>
                     <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1">Credit Account</label>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">Deduct from Account</label>
                         <select
                             required
                             value={creditAccountId}
                             onChange={e => setCreditAccountId(e.target.value)}
                             className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-primary"
                         >
-                            {creditAccounts.length > 0 ? (
-                                creditAccounts.map(acc => (
-                                    <option key={acc.id} value={acc.id}>{acc.name}</option>
-                                ))
-                            ) : (
-                                <option value="" disabled>No credit accounts found</option>
-                            )}
+                            {allAccounts.map(acc => (
+                                <option key={acc.id} value={acc.id}>{acc.name} ({acc.type})</option>
+                            ))}
                         </select>
                     </div>
                 </div>
@@ -181,7 +176,7 @@ export function InstallmentForm({ isOpen, onClose, onSuccess }: InstallmentFormP
 
                 <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1">Category (for payments)</label>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">Category (Billing)</label>
                         <select
                             required
                             value={categoryId}
@@ -207,6 +202,28 @@ export function InstallmentForm({ isOpen, onClose, onSuccess }: InstallmentFormP
                                 <option key={sub.id} value={sub.id}>{sub.name}</option>
                             ))}
                         </select>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4">
+                    <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">Processing</label>
+                        <div className="flex bg-gray-900/50 rounded-lg p-1 gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setAutoAdd(true)}
+                                className={`flex-1 text-[10px] font-bold py-2 rounded-md transition-all border ${autoAdd ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.1)]' : 'bg-transparent border-gray-700 text-gray-400 hover:border-gray-600'}`}
+                            >
+                                AUTO-ADD: ON
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setAutoAdd(false)}
+                                className={`flex-1 text-[10px] font-bold py-2 rounded-md transition-all border ${!autoAdd ? 'bg-gray-700 border-gray-600 text-white' : 'bg-transparent border-gray-700 text-gray-400 hover:border-gray-600'}`}
+                            >
+                                AUTO-ADD: OFF
+                            </button>
+                        </div>
                     </div>
                 </div>
 
