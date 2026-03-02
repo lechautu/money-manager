@@ -10,7 +10,8 @@ import {
     TrendingUp,
     Settings,
     Tag,
-    Plus
+    Plus,
+    Users
 } from 'lucide-react';
 import { TransactionForm } from './transactions/TransactionForm';
 import { twMerge } from 'tailwind-merge';
@@ -23,6 +24,7 @@ const NAV_ITEMS = [
     { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/accounts', label: 'Accounts', icon: Wallet },
     { to: '/categories', label: 'Categories', icon: Tag },
+    { to: '/payees', label: 'Payees', icon: Users },
     { to: '/recurring', label: 'Recurring', icon: Repeat },
     { to: '/installments', label: 'Installments', icon: CreditCard },
     { to: '/analytics', label: 'Analytics', icon: PieChart },

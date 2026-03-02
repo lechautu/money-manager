@@ -127,6 +127,10 @@
                         "format": "date",
                         "description": "Ngày giao dịch (YYYY-MM-DD)"
                     },
+                    "payee_id": {
+                        "type": "string",
+                        "description": "ID người nhận/người trả"
+                    },
                     "note": {
                         "type": "string",
                         "description": "Ghi chú giao dịch"
@@ -224,6 +228,17 @@
                     },
                     "categoryId": {
                         "type": "string"
+                    },
+                    "payeeId": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "posted",
+                            "pending",
+                            "ignored"
+                        ]
                     }
                 }
             },
@@ -324,7 +339,19 @@
                         "enum": [
                             0,
                             1
-                        ]
+                        ],
+                        "default": 1
+                    },
+                    "default_status": {
+                        "type": "string",
+                        "enum": [
+                            "posted",
+                            "pending"
+                        ],
+                        "default": "pending"
+                    },
+                    "payee_id": {
+                        "type": "string"
                     }
                 },
                 "required": [
@@ -391,6 +418,25 @@
                         "format": "date"
                     },
                     "payment_category_id": {
+                        "type": "string"
+                    },
+                    "auto_add": {
+                        "type": "integer",
+                        "enum": [
+                            0,
+                            1
+                        ],
+                        "default": 1
+                    },
+                    "default_status": {
+                        "type": "string",
+                        "enum": [
+                            "posted",
+                            "pending"
+                        ],
+                        "default": "pending"
+                    },
+                    "payee_id": {
                         "type": "string"
                     }
                 },
@@ -751,6 +797,9 @@
                     "sub_category_id": {
                         "type": "string"
                     },
+                    "payee_id": {
+                        "type": "string"
+                    },
                     "note": {
                         "type": "string"
                     }
@@ -849,6 +898,53 @@
                         "type": "number"
                     },
                     "frequency": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "income",
+                            "expense",
+                            "transfer"
+                        ]
+                    },
+                    "start_date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "end_date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "max_instances": {
+                        "type": "integer"
+                    },
+                    "account_id": {
+                        "type": "string"
+                    },
+                    "to_account_id": {
+                        "type": "string"
+                    },
+                    "category_id": {
+                        "type": "string"
+                    },
+                    "sub_category_id": {
+                        "type": "string"
+                    },
+                    "is_active": {
+                        "type": "integer",
+                        "enum": [
+                            0,
+                            1
+                        ]
+                    },
+                    "auto_add": {
+                        "type": "integer"
+                    },
+                    "default_status": {
+                        "type": "string"
+                    },
+                    "payee_id": {
                         "type": "string"
                     }
                 },
@@ -1161,6 +1257,174 @@
                 ]
             },
             "tier": 1
+        },
+        {
+            "name": "get_payees",
+            "category": "Payees",
+            "description": "Lấy danh sách người nhận/người trả.",
+            "parameters": {},
+            "tier": 0
+        },
+        {
+            "name": "create_payee",
+            "category": "Payees",
+            "description": "Thêm một người nhận/người trả mới.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "name"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "update_payee",
+            "category": "Payees",
+            "description": "Cập nhật tên người nhận/người trả.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "name"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "archive_payee",
+            "category": "Payees",
+            "description": "Ẩn hoặc hiện lại người nhận/người trả.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "is_archived": {
+                        "type": "integer",
+                        "enum": [
+                            0,
+                            1
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "is_archived"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "update_installment_plan",
+            "category": "Installments",
+            "description": "Cập nhật cấu hình kế hoạch trả góp.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "auto_add": {
+                        "type": "integer",
+                        "enum": [
+                            0,
+                            1
+                        ]
+                    },
+                    "default_status": {
+                        "type": "string",
+                        "enum": [
+                            "posted",
+                            "pending"
+                        ]
+                    },
+                    "payee_id": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "link_installment_transaction",
+            "category": "Installments",
+            "description": "Liên kết một giao dịch hiện có vào một kỳ trả góp.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "paymentId": {
+                        "type": "string"
+                    },
+                    "transactionId": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "expense",
+                            "linked"
+                        ]
+                    }
+                },
+                "required": [
+                    "paymentId",
+                    "transactionId"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "link_recurring_transaction",
+            "category": "Recurring",
+            "description": "Liên kết giao dịch thủ công cho một quy tắc định kỳ.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ruleId": {
+                        "type": "string"
+                    },
+                    "transactionId": {
+                        "type": "string"
+                    },
+                    "date": {
+                        "type": "string",
+                        "format": "date"
+                    }
+                },
+                "required": [
+                    "ruleId",
+                    "transactionId",
+                    "date"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "get_pending_installment_count",
+            "category": "Installments",
+            "description": "Lấy số lượng các kỳ trả góp đang chờ xác nhận (pending).",
+            "parameters": {},
+            "tier": 0
         }
     ]
 }

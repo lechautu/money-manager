@@ -14,9 +14,9 @@ export const RecurringService = {
         const id = uuidv4();
         const now = new Date().toISOString();
         run(
-            `INSERT INTO recurring_rules (id, name, frequency, type, amount, start_date, end_date, max_instances, auto_add, default_status, is_active, account_id, to_account_id, category_id, sub_category_id, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [id, data.name || null, data.frequency, data.type, data.amount, data.start_date, data.end_date || null, data.max_instances || null, data.auto_add ?? 1, data.default_status || 'posted', 1, data.account_id, data.to_account_id || null, data.category_id || null, data.sub_category_id || null, now, now]
+            `INSERT INTO recurring_rules (id, name, frequency, type, amount, start_date, end_date, max_instances, auto_add, default_status, is_active, account_id, to_account_id, category_id, sub_category_id, payee_id, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [id, data.name || null, data.frequency, data.type, data.amount, data.start_date, data.end_date || null, data.max_instances || null, data.auto_add ?? 1, data.default_status || 'pending', 1, data.account_id, data.to_account_id || null, data.category_id || null, data.sub_category_id || null, data.payee_id || null, now, now]
         );
         return get('SELECT * FROM recurring_rules WHERE id = ?', [id]);
     },
@@ -26,7 +26,7 @@ export const RecurringService = {
         const fields: string[] = [];
         const args: any[] = [];
 
-        const allowed = ['name', 'frequency', 'type', 'amount', 'start_date', 'end_date', 'max_instances', 'auto_add', 'default_status', 'is_active', 'account_id', 'to_account_id', 'category_id', 'sub_category_id'];
+        const allowed = ['name', 'frequency', 'type', 'amount', 'start_date', 'end_date', 'max_instances', 'auto_add', 'default_status', 'is_active', 'account_id', 'to_account_id', 'category_id', 'sub_category_id', 'payee_id'];
         for (const key of allowed) {
             if (data[key] !== undefined) { fields.push(`${key} = ?`); args.push(data[key]); }
         }
@@ -72,7 +72,12 @@ export const RecurringService = {
         console.log(`[CHECK] Generating instances for rule: ${rule.name} (Start: ${rule.start_date}, Today: ${today})`);
 
         const existingDates = new Set(
-            all<any>('SELECT date FROM recurring_instances WHERE rule_id = ?', [ruleId]).map((r: any) => r.date)
+            all<any>(`
+                SELECT ri.date 
+                FROM recurring_instances ri
+                JOIN transactions t ON ri.generated_transaction_id = t.id
+                WHERE ri.rule_id = ? AND t.deleted_at IS NULL
+            `, [ruleId]).map((r: any) => r.date)
         );
 
         let generated = 0;
@@ -105,13 +110,13 @@ export const RecurringService = {
                     console.log(`[ACTION] Auto-adding transaction for recurring rule: ${rule.name} on ${currentDate}`);
 
                     run(
-                        `INSERT INTO transactions (id, account_id, to_account_id, date, month, amount, category_id, sub_category_id, status, source, source_ref_id, note, created_at, updated_at)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'recurring', ?, ?, ?, ?)`,
-                        [txId, rule.account_id, rule.to_account_id || null, currentDate, month, amount, rule.category_id || null, rule.sub_category_id || null, rule.default_status || 'posted', ruleId, `Recurring: ${rule.name || rule.id}`, now, now]
+                        `INSERT INTO transactions (id, account_id, to_account_id, date, month, amount, category_id, sub_category_id, status, source, source_ref_id, note, payee_id, created_at, updated_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'recurring', ?, ?, ?, ?, ?)`,
+                        [txId, rule.account_id, rule.to_account_id || null, currentDate, month, amount, rule.category_id || null, rule.sub_category_id || null, rule.default_status || 'posted', ruleId, `Recurring: ${rule.name || rule.id}`, rule.payee_id || null, now, now]
                     );
                 }
 
-                run('INSERT INTO recurring_instances (id, rule_id, date, generated_transaction_id, created_at) VALUES (?, ?, ?, ?, ?)',
+                run('INSERT OR REPLACE INTO recurring_instances (id, rule_id, date, generated_transaction_id, created_at) VALUES (?, ?, ?, ?, ?)',
                     [instanceId, ruleId, currentDate, txId, new Date().toISOString()]);
                 generated++;
             }

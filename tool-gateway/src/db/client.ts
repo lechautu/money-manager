@@ -54,7 +54,11 @@ export async function initDatabase(): Promise<void> {
         "ALTER TABLE audit_logs ADD COLUMN action TEXT NOT NULL DEFAULT 'unknown'",
         "ALTER TABLE audit_logs ADD COLUMN entity_type TEXT NOT NULL DEFAULT 'unknown'",
         "ALTER TABLE audit_logs ADD COLUMN entity_id TEXT",
-        "ALTER TABLE audit_logs ADD COLUMN details TEXT"
+        "ALTER TABLE audit_logs ADD COLUMN details TEXT",
+        "ALTER TABLE transactions ADD COLUMN payee_id TEXT",
+        "ALTER TABLE recurring_rules ADD COLUMN payee_id TEXT",
+        "ALTER TABLE installment_plans ADD COLUMN payee_id TEXT",
+        "ALTER TABLE installment_plans ADD COLUMN default_status TEXT DEFAULT 'posted'"
     ];
     for (const m of migrations) {
         try { db.exec(m); } catch (e) { /* ignore if column exists */ }

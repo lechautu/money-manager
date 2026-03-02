@@ -5,6 +5,8 @@ import { AccountService } from '../../services/AccountService';
 import type { Account } from '../../services/AccountService';
 import { CategoryService } from '../../services/CategoryService';
 import type { Category, SubCategory } from '../../services/CategoryService';
+import { PayeeService } from '../../services/PayeeService';
+import type { Payee } from '../../services/PayeeService';
 import { TransactionForm } from './TransactionForm';
 import { Plus, ArrowUp, ArrowDown, Trash2, MoreVertical, Copy, Layers, ChevronLeft } from 'lucide-react';
 import { useToast } from '../common/Toast';
@@ -32,6 +34,7 @@ export function TransactionList() {
     const [accounts, setAccounts] = useState<Record<string, Account>>({});
     const [categories, setCategories] = useState<Record<string, Category>>({});
     const [subCategories, setSubCategories] = useState<Record<string, SubCategory>>({});
+    const [payees, setPayees] = useState<Payee[]>([]);
     const [balances, setBalances] = useState<Record<string, { posted: number, effective: number }>>({});
     const [summary, setSummary] = useState({ income: 0, expense: 0 });
 
@@ -65,7 +68,8 @@ export function TransactionList() {
     const [filterAccountId, setFilterAccountId] = useState(searchParams.get('accountId') || '');
     const [filterCategoryId, setFilterCategoryId] = useState(searchParams.get('categoryId') || '');
     const [filterSubCategoryId, setFilterSubCategoryId] = useState(searchParams.get('subCategoryId') || '');
-    const [filterStatus, setFilterStatus] = useState('');
+    const [filterPayeeId, setFilterPayeeId] = useState(searchParams.get('payeeId') || '');
+    const [filterStatus, setFilterStatus] = useState(searchParams.get('status') || '');
 
     // Sort
     const [sortBy, setSortBy] = useState<'date' | 'amount'>('date');
@@ -84,7 +88,7 @@ export function TransactionList() {
 
     useEffect(() => {
         loadData();
-    }, [timePreset, dateRange, month, search, filterAccountId, filterCategoryId, filterSubCategoryId, filterStatus, sortBy, sortOrder]);
+    }, [timePreset, dateRange, month, search, filterAccountId, filterCategoryId, filterSubCategoryId, filterPayeeId, filterStatus, sortBy, sortOrder]);
 
     useEffect(() => {
         const handleClickOutside = () => {
@@ -106,16 +110,18 @@ export function TransactionList() {
             categoryId: filterCategoryId || undefined,
             subCategoryId: filterSubCategoryId || undefined,
             status: filterStatus || undefined,
+            payeeId: filterPayeeId || undefined,
             sortBy,
             sortOrder
         };
 
-        const [txs, accs, cats, subCats, bals] = await Promise.all([
+        const [txs, accs, cats, subCats, bals, payeeList] = await Promise.all([
             TransactionService.getAll(filter),
             AccountService.getAll(),
             CategoryService.getAll(),
             CategoryService.getAllSubCategories(),
-            TransactionService.getBalances()
+            TransactionService.getBalances(),
+            PayeeService.getAll(true)
         ]);
 
         const accMap: Record<string, Account> = {};
@@ -131,6 +137,7 @@ export function TransactionList() {
         setSubCategories(subCatMap);
 
         setBalances(bals);
+        setPayees(payeeList);
 
         // Calc summary for current view - Exclude transfers as they are internal
         let inc = 0, exp = 0;
@@ -237,10 +244,19 @@ export function TransactionList() {
     };
 
     const handleBulkDelete = async () => {
-        if (!confirm(`Are you sure you want to delete ${selectedIds.size} transactions?`)) return;
         const idsToDelete = Array.from(selectedIds);
+        const linkedTxs = transactions.filter(t => idsToDelete.includes(t.id) && (t.source === 'recurring' || t.source === 'installment'));
+
         try {
-            await TransactionService.bulkDelete(idsToDelete);
+            if (linkedTxs.length > 0) {
+                const msg = `Bạn đã chọn ${selectedIds.size} giao dịch, trong đó có một số giao dịch liên kết với kế hoạch tự động. \n\nBạn có muốn XÓA và TẮT "Tự động thêm" cho các kế hoạch này để tránh bị tạo lại không? \n\n(Nhấn CANCEL để hủy toàn bộ lệnh xóa)`;
+                if (!confirm(msg)) return;
+
+                await TransactionService.bulkDelete(idsToDelete, { disableAutoAdd: true });
+            } else {
+                if (!confirm(`Are you sure you want to delete ${selectedIds.size} transactions?`)) return;
+                await TransactionService.bulkDelete(idsToDelete);
+            }
 
             showUndo(`${idsToDelete.length} transactions deleted`, async () => {
                 await TransactionService.bulkRestore(idsToDelete);
@@ -307,10 +323,19 @@ export function TransactionList() {
     };
 
     const handleDelete = async (id: string) => {
-        if (!window.confirm('Are you sure you want to delete this transaction?')) return;
+        const tx = transactions.find(t => t.id === id);
 
         try {
-            await TransactionService.delete(id);
+            if (tx && (tx.source === 'recurring' || tx.source === 'installment')) {
+                const planType = tx.source === 'recurring' ? 'thiết lập định kỳ' : 'kế hoạch trả góp';
+                const msg = `Giao dịch này liên kết với ${planType}. \n\nBạn có muốn XÓA và TẮT "Tự động thêm" để tránh hệ thống tự tạo lại không?\n\n(Nhấn CANCEL để hủy, không xóa gì cả)`;
+                if (!window.confirm(msg)) return;
+
+                await TransactionService.delete(id, { disableAutoAdd: true });
+            } else {
+                if (!window.confirm('Are you sure you want to delete this transaction?')) return;
+                await TransactionService.delete(id);
+            }
 
             showUndo('Transaction deleted', async () => {
                 await TransactionService.restore(id);
@@ -420,7 +445,7 @@ export function TransactionList() {
 
             {/* Filters Bar */}
             <div className="flex flex-col gap-2 bg-gray-900/50 p-3 rounded-lg border border-gray-800">
-                <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-7 gap-2">
                     <select
                         value={timePreset}
                         onChange={e => handleTimePresetChange(e.target.value as TimePreset)}
@@ -475,6 +500,15 @@ export function TransactionList() {
                         {Object.values(categories).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
 
+                    <select
+                        value={filterPayeeId}
+                        onChange={e => setFilterPayeeId(e.target.value)}
+                        className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white"
+                    >
+                        <option value="">All Payees</option>
+                        {payees.map(p => <option key={p.id} value={p.id}>{p.name}{p.is_archived ? ' (archived)' : ''}</option>)}
+                    </select>
+
                     {filterCategoryId ? (
                         <select
                             value={filterSubCategoryId}
@@ -509,6 +543,7 @@ export function TransactionList() {
                                     setFilterAccountId('');
                                     setFilterCategoryId('');
                                     setFilterSubCategoryId('');
+                                    setFilterPayeeId('');
                                     setFilterStatus('');
                                 }}
                                 className="px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white rounded border border-gray-700 transition-colors"
@@ -575,9 +610,10 @@ export function TransactionList() {
                     >
                         Date {sortBy === 'date' && (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
                     </div>
-                    <div className="col-span-3">Category</div>
+                    <div className="col-span-2">Payee</div>
+                    <div className="col-span-2">Category</div>
                     <div className="col-span-2">Note</div>
-                    <div className="col-span-2">Account</div>
+                    <div className="col-span-1">Account</div>
                     <div
                         className="col-span-2 text-right cursor-pointer flex items-center justify-end gap-1 hover:text-white"
                         onClick={() => handleSort('amount')}
@@ -657,8 +693,13 @@ export function TransactionList() {
 
                                 <div className="col-span-2 md:col-span-1 text-sm text-gray-400 font-mono">{formatDate(tx.date)}</div>
 
+                                {/* Payee Column (Desktop) */}
+                                <div className="col-span-4 md:col-span-2 text-sm text-white truncate hidden md:block" title={tx.payee_name || ''}>
+                                    {tx.payee_name || '-'}
+                                </div>
+
                                 {/* Category Column (Swapped) */}
-                                <div className="col-span-6 md:col-span-3">
+                                <div className="col-span-6 md:col-span-2">
                                     <div className="text-sm text-white truncate flex items-center">
                                         {!!tx.is_split && <Layers size={12} className="inline mr-1 text-primary shrink-0" />}
                                         <span className="truncate" title={categoryLabel}>{categoryLabel}</span>
@@ -678,7 +719,7 @@ export function TransactionList() {
                                     )}
 
                                     <div className="text-xs text-gray-500 md:hidden">
-                                        {accountLabel}
+                                        {accountLabel} {tx.payee_name && `• ${tx.payee_name}`}
                                     </div>
                                 </div>
 
@@ -687,7 +728,7 @@ export function TransactionList() {
                                     {description}
                                 </div>
 
-                                <div className="col-span-2 text-xs text-gray-400 hidden md:block truncate">{accountLabel}</div>
+                                <div className="col-span-2 md:col-span-1 text-xs text-gray-400 hidden md:block truncate">{accountLabel}</div>
                                 <div className={`col-span-4 md:col-span-2 text-right font-medium text-sm ${isExpense ? 'text-white' : 'text-emerald-400'}`}>
                                     {isExpense ? '-' : '+'}{formatMoney(Math.abs(displayAmount), acc?.currency)}
                                 </div>

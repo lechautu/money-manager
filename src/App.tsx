@@ -11,6 +11,7 @@ import BudgetPage from './pages/BudgetPage';
 import ForecastPage from './pages/ForecastPage';
 import ForecastDetailPage from './pages/ForecastDetailPage';
 import CategoryPage from './pages/CategoryPage';
+import PayeePage from './pages/PayeePage';
 import AuditLogPage from './pages/AuditLogPage';
 
 import { AuthLock } from './components/auth/AuthLock';
@@ -33,6 +34,7 @@ function App() {
                   <Route path="/accounts" element={<AccountsPage />} />
                   <Route path="/transactions" element={<TransactionsPage />} />
                   <Route path="/categories" element={<CategoryPage />} />
+                  <Route path="/payees" element={<PayeePage />} />
                   <Route path="/recurring" element={<RecurringPage />} />
                   <Route path="/installments" element={<InstallmentPage />} />
                   <Route path="/analytics" element={<AnalyticsPage />} />

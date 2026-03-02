@@ -29,6 +29,15 @@ CREATE TABLE IF NOT EXISTS sub_categories (
     UNIQUE(category_id, name)
 );
 
+CREATE TABLE IF NOT EXISTS payees (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    normalized_name TEXT,
+    is_archived INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS transactions (
     id TEXT PRIMARY KEY,
     account_id TEXT NOT NULL REFERENCES accounts(id),
@@ -67,7 +76,7 @@ CREATE TABLE IF NOT EXISTS recurring_rules (
     end_date TEXT,
     max_instances INTEGER,
     auto_add INTEGER DEFAULT 1,
-    default_status TEXT DEFAULT 'posted',
+    default_status TEXT DEFAULT 'pending',
     is_active INTEGER DEFAULT 1,
     account_id TEXT NOT NULL REFERENCES accounts(id),
     to_account_id TEXT REFERENCES accounts(id),
@@ -97,7 +106,8 @@ CREATE TABLE IF NOT EXISTS installment_plans (
     payment_category_id TEXT REFERENCES categories(id),
     payment_sub_category_id TEXT REFERENCES sub_categories(id),
     notify_before_days INTEGER DEFAULT 3,
-    auto_add INTEGER DEFAULT 0,
+    auto_add INTEGER DEFAULT 1,
+    default_status TEXT DEFAULT 'pending',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );

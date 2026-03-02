@@ -25,7 +25,9 @@ Tài liệu này quy định chính sách thực thi (Execution Policy) và phâ
      - `get_cashflow_trend`
      - `get_daily_spending`
      - `get_category_movers`
+     - `get_payees`
      - `get_pending_summary`
+     - `get_pending_installment_count`
      - `get_upcoming_payments`
      - `get_audit_logs`
      - `export_system_data`
@@ -43,6 +45,9 @@ Tài liệu này quy định chính sách thực thi (Execution Policy) và phâ
      - `update_category`
      - `update_subcategory`
      - `move_subcategory`
+     - `create_payee`
+     - `update_payee`
+     - `archive_payee`
      - `record_transaction`
      - `update_transaction`
      - `transfer_funds`
@@ -54,8 +59,11 @@ Tài liệu này quy định chính sách thực thi (Execution Policy) và phâ
      - `trigger_recurring_instance`
      - `generate_recurring_instances`
      - `create_installment_plan`
+     - `update_installment_plan`
      - `pay_installment`
      - `check_overdue_installments`
+     - `link_installment_transaction`
+     - `link_recurring_transaction`
      - `set_category_budget`
      - `clone_month_budget`
      - `generate_budgets_from_automation`

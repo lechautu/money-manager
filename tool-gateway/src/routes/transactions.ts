@@ -43,11 +43,11 @@ transactionRoutes.post('/bulk_restore_transactions', auditLog('bulk_restore_tran
 });
 
 transactionRoutes.delete('/delete_transaction', approvalGuard('delete_transaction'), auditLog('delete_transaction', 2, 'transaction'), (req, res) => {
-    try { TransactionService.delete(req.body.id); res.json({ data: { success: true } }); }
+    try { TransactionService.delete(req.body.id, { disableAutoAdd: req.body.disableAutoAdd }); res.json({ data: { success: true } }); }
     catch (e: any) { res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: e.message } }); }
 });
 
 transactionRoutes.post('/bulk_delete_transactions', approvalGuard('bulk_delete_transactions'), auditLog('bulk_delete_transactions', 2, 'transaction'), (req, res) => {
-    try { TransactionService.bulkDelete(req.body.ids); res.json({ data: { success: true } }); }
+    try { TransactionService.bulkDelete(req.body.ids, { disableAutoAdd: req.body.disableAutoAdd }); res.json({ data: { success: true } }); }
     catch (e: any) { res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: e.message } }); }
 });

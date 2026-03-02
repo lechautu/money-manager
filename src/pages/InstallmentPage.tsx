@@ -11,6 +11,7 @@ import { formatDisplayDate } from '../utils/dateUtils';
 export default function InstallmentPage() {
     const [plans, setPlans] = useState<InstallmentPlan[]>([]);
     const [isFormOpen, setIsFormOpen] = useState(false);
+    const [editingPlan, setEditingPlan] = useState<InstallmentPlan | null>(null);
     const [loading, setLoading] = useState(true);
     const [expandedPlan, setExpandedPlan] = useState<string | null>(null);
     const [payments, setPayments] = useState<InstallmentPayment[]>([]);
@@ -63,6 +64,11 @@ export default function InstallmentPage() {
         }
     };
 
+    const handleEdit = (plan: InstallmentPlan) => {
+        setEditingPlan(plan);
+        setIsFormOpen(true);
+    };
+
     const handleDelete = async (id: string) => {
         if (confirm('Delete this installment plan AND all linked data? Transactions already paid will be kept.')) {
             try {
@@ -87,7 +93,7 @@ export default function InstallmentPage() {
                     <CreditCard className="text-primary" /> Installment Plans
                 </h1>
                 <button
-                    onClick={() => setIsFormOpen(true)}
+                    onClick={() => { setEditingPlan(null); setIsFormOpen(true); }}
                     className="flex items-center gap-2 px-3 py-2 bg-primary hover:bg-blue-600 rounded text-sm text-white"
                 >
                     <Plus size={16} /> New Plan
@@ -134,6 +140,11 @@ export default function InstallmentPage() {
                                     <div className="flex items-center gap-1">
                                         <Calendar size={14} /> Start: {formatDisplayDate(plan.start_date)}
                                     </div>
+                                    {plan.default_status === 'pending' && (
+                                        <div className="bg-amber-500/10 text-amber-500 text-[10px] px-1.5 py-0.5 rounded border border-amber-500/20 font-bold uppercase">
+                                            Default: Pending
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -155,12 +166,22 @@ export default function InstallmentPage() {
                                 {plan.auto_add ? 'Auto-Add: ON' : 'Auto-Add: OFF'}
                             </button>
 
-                            <button
-                                onClick={(e) => { e.stopPropagation(); handleDelete(plan.id); }}
-                                className="p-2 text-gray-500 hover:text-red-500 rounded hover:bg-red-500/10"
-                            >
-                                <Trash size={16} />
-                            </button>
+                            <div className="flex gap-1">
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); handleEdit(plan); }}
+                                    className="p-2 text-gray-500 hover:text-primary rounded hover:bg-primary/10"
+                                    title="Edit Plan"
+                                >
+                                    <Plus size={16} className="rotate-45" /> {/* Use Plus rotated for now or find better icon */}
+                                </button>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); handleDelete(plan.id); }}
+                                    className="p-2 text-gray-500 hover:text-red-500 rounded hover:bg-red-500/10"
+                                    title="Delete Plan"
+                                >
+                                    <Trash size={16} />
+                                </button>
+                            </div>
                         </div>
 
                         {expandedPlan === plan.id && (
@@ -219,7 +240,8 @@ export default function InstallmentPage() {
 
             <InstallmentForm
                 isOpen={isFormOpen}
-                onClose={() => setIsFormOpen(false)}
+                onClose={() => { setIsFormOpen(false); setEditingPlan(null); }}
+                initialData={editingPlan}
                 onSuccess={loadData}
             />
 

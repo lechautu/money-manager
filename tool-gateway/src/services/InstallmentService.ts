@@ -15,9 +15,9 @@ export const InstallmentService = {
             const id = uuidv4();
             const now = new Date().toISOString();
             run(
-                `INSERT INTO installment_plans (id, name, credit_account_id, payment_source_account_id, total_amount, tenor_months, start_date, payment_category_id, payment_sub_category_id, auto_add, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [id, data.name || null, data.credit_account_id, data.payment_source_account_id || null, data.total_amount, data.tenor_months, data.start_date, data.payment_category_id || null, data.payment_sub_category_id || null, data.auto_add ? 1 : 0, now, now]
+                `INSERT INTO installment_plans (id, name, credit_account_id, payment_source_account_id, total_amount, tenor_months, start_date, payment_category_id, payment_sub_category_id, auto_add, default_status, payee_id, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [id, data.name || null, data.credit_account_id, data.payment_source_account_id || null, data.total_amount, data.tenor_months, data.start_date, data.payment_category_id || null, data.payment_sub_category_id || null, (data.auto_add ?? 1) ? 1 : 0, data.default_status || 'pending', data.payee_id || null, now, now]
             );
 
             // Generate payment schedule
@@ -60,12 +60,12 @@ export const InstallmentService = {
 
         // Auto-add expense transaction if enabled
         const autoAdds = all<any>(`
-            SELECT p.id as payment_id, p.amount, p.due_date, plan.credit_account_id, plan.payment_category_id, plan.payment_sub_category_id, plan.name as plan_name, p.expense_transaction_id
+            SELECT p.id as payment_id, p.amount, p.due_date, p.due_month, plan.credit_account_id, plan.payment_category_id, plan.payment_sub_category_id, plan.name as plan_name, plan.payee_id, plan.default_status, p.expense_transaction_id
             FROM installment_payments p
             JOIN installment_plans plan ON p.plan_id = plan.id
             WHERE p.status IN ('due', 'overdue')
               AND plan.auto_add = 1
-              AND p.expense_transaction_id IS NULL
+              AND (p.expense_transaction_id IS NULL OR p.expense_transaction_id IN (SELECT id FROM transactions WHERE deleted_at IS NOT NULL))
         `);
 
         console.log(`[CHECK] Found ${autoAdds.length} installments to auto-add as expenses`);
@@ -90,9 +90,9 @@ export const InstallmentService = {
                     const txId = uuidv4();
                     console.log(`[ACTION] Auto-adding EXPENSE for installment ${aa.payment_id} (Plan: ${aa.plan_name}) to ${aa.credit_account_id}`);
                     run(
-                        `INSERT INTO transactions (id, account_id, to_account_id, date, month, amount, category_id, sub_category_id, status, source, source_ref_id, note, created_at, updated_at)
-                         VALUES (?, ?, NULL, ?, ?, ?, ?, ?, 'posted', 'installment', ?, ?, ?, ?)`,
-                        [txId, aa.credit_account_id, aa.due_date, month, -Math.abs(aa.amount), aa.payment_category_id, aa.payment_sub_category_id || null, aa.payment_id, `Installment: ${aa.plan_name || aa.payment_id}`, now, now]
+                        `INSERT INTO transactions (id, account_id, to_account_id, date, month, amount, category_id, sub_category_id, status, source, source_ref_id, note, payee_id, created_at, updated_at)
+                         VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, 'installment', ?, ?, ?, ?, ?)`,
+                        [txId, aa.credit_account_id, aa.due_date, month, -Math.abs(aa.amount), aa.payment_category_id, aa.payment_sub_category_id || null, aa.default_status || 'posted', aa.payment_id, `Installment: ${aa.plan_name || aa.payment_id}`, aa.payee_id || null, now, now]
                     );
                     run("UPDATE installment_payments SET expense_transaction_id = ? WHERE id = ?", [txId, aa.payment_id]);
                 }
@@ -112,19 +112,31 @@ export const InstallmentService = {
             const plan = get<any>('SELECT * FROM installment_plans WHERE id = ?', [payment.plan_id]);
             if (!plan) throw new Error('Plan not found');
 
-            // Create transfer transaction
-            const txId = uuidv4();
             const now = new Date().toISOString();
-            const date = new Date().toISOString().substring(0, 10);
+            const date = now.substring(0, 10);
             const month = date.substring(0, 7);
 
+            // 1. If the expense hasn't been recorded yet (common if auto_add is off), record it now
+            if (!payment.expense_transaction_id) {
+                const expenseTxId = uuidv4();
+                console.log(`[ACTION] Manual pay trigger: Adding missing EXPENSE for installment ${paymentId} to ${plan.credit_account_id}`);
+                run(
+                    `INSERT INTO transactions (id, account_id, to_account_id, date, month, amount, category_id, sub_category_id, status, source, source_ref_id, note, payee_id, created_at, updated_at)
+                     VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, 'installment', ?, ?, ?, ?, ?)`,
+                    [expenseTxId, plan.credit_account_id, payment.due_date, payment.due_month, -Math.abs(payment.amount), plan.payment_category_id, plan.payment_sub_category_id || null, plan.default_status || 'posted', paymentId, `Installment: ${plan.name || plan.id}`, plan.payee_id || null, now, now]
+                );
+                run("UPDATE installment_payments SET expense_transaction_id = ? WHERE id = ?", [expenseTxId, paymentId]);
+            }
+
+            // 2. Create transfer transaction (The actual payment)
+            const txId = uuidv4();
             run(
-                `INSERT INTO transactions (id, account_id, to_account_id, date, month, amount, category_id, sub_category_id, status, source, source_ref_id, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'posted', 'installment', ?, ?, ?)`,
-                [txId, fromAccountId, toAccountId, date, month, -Math.abs(payment.amount), plan.payment_category_id, plan.payment_sub_category_id, paymentId, now, now]
+                `INSERT INTO transactions (id, account_id, to_account_id, date, month, amount, category_id, sub_category_id, status, source, source_ref_id, note, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'posted', 'installment', ?, ?, ?, ?)`,
+                [txId, fromAccountId, toAccountId, date, month, -Math.abs(payment.amount), plan.payment_category_id, plan.payment_sub_category_id, paymentId, `Payment for ${plan.name || plan.id}`, now, now]
             );
 
-            // Update payment status
+            // 3. Update payment status
             run("UPDATE installment_payments SET status = 'paid', generated_transaction_id = ?, paid_at = ? WHERE id = ?",
                 [txId, now, paymentId]);
 
@@ -144,7 +156,7 @@ export const InstallmentService = {
         const fields: string[] = [];
         const args: any[] = [];
 
-        const allowed = ['name', 'auto_add', 'payment_source_account_id', 'payment_category_id', 'payment_sub_category_id', 'notify_before_days'];
+        const allowed = ['name', 'auto_add', 'default_status', 'payment_source_account_id', 'payment_category_id', 'payment_sub_category_id', 'notify_before_days', 'payee_id'];
         for (const key of allowed) {
             if (data[key] !== undefined) {
                 fields.push(`${key} = ?`);

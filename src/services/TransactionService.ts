@@ -9,6 +9,7 @@ export interface Transaction {
     category_id: string;
     sub_category_id?: string | null;
     to_account_id?: string | null;
+    payee_id?: string | null;
     status: 'posted' | 'pending' | 'ignored';
     note?: string | null;
     source: 'manual' | 'recurring' | 'installment' | 'transfer';
@@ -27,6 +28,7 @@ export interface Transaction {
     recurring_name?: string;
     installment_plan_name?: string;
     installment_period?: string;
+    payee_name?: string;
 }
 
 export interface TransactionSplit {
@@ -46,6 +48,7 @@ export type TransactionFilter = {
     categoryId?: string;
     subCategoryId?: string;
     status?: string;
+    payeeId?: string;
     search?: string;
     source?: string;
     excludeSource?: string[];
@@ -81,8 +84,8 @@ export const TransactionService = {
         return res.data;
     },
 
-    async delete(id: string): Promise<void> {
-        await ToolExecutionService.executeTool('delete_transaction', { id });
+    async delete(id: string, options: { disableAutoAdd?: boolean } = {}): Promise<void> {
+        await ToolExecutionService.executeTool('delete_transaction', { id, ...options });
     },
 
     async restore(id: string): Promise<void> {
@@ -94,8 +97,8 @@ export const TransactionService = {
         return res.data;
     },
 
-    async bulkDelete(ids: string[]): Promise<void> {
-        await ToolExecutionService.executeTool('bulk_delete_transactions', { ids });
+    async bulkDelete(ids: string[], options: { disableAutoAdd?: boolean } = {}): Promise<void> {
+        await ToolExecutionService.executeTool('bulk_delete_transactions', { ids, ...options });
     },
 
     async bulkRestore(ids: string[]): Promise<void> {

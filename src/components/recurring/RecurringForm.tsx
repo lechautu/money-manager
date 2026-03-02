@@ -7,6 +7,7 @@ import { CategoryService } from '../../services/CategoryService';
 import type { Category, SubCategory } from '../../services/CategoryService';
 import { Modal } from '../ui/Modal';
 import { useToast } from '../common/Toast';
+import { PayeePicker } from '../common/PayeePicker';
 
 interface RecurringFormProps {
     isOpen: boolean;
@@ -28,6 +29,7 @@ export function RecurringForm({ isOpen, onClose, initialData, onSuccess }: Recur
     const [endCondition, setEndCondition] = useState<'none' | 'date' | 'count'>('none');
     const [autoAdd, setAutoAdd] = useState(true);
     const [defaultStatus, setDefaultStatus] = useState<'pending' | 'posted'>('pending');
+    const [payeeId, setPayeeId] = useState<string | null>(null);
 
     const [type, setType] = useState<'income' | 'expense' | 'transfer'>('expense');
     const [toAccountId, setToAccountId] = useState('');
@@ -61,6 +63,7 @@ export function RecurringForm({ isOpen, onClose, initialData, onSuccess }: Recur
 
                 setAutoAdd(initialData.auto_add !== 0);
                 setDefaultStatus(initialData.default_status);
+                setPayeeId((initialData as any).payee_id || null);
             } else {
                 setName('');
                 setAmount('');
@@ -76,6 +79,7 @@ export function RecurringForm({ isOpen, onClose, initialData, onSuccess }: Recur
                 setEndCondition('none');
                 setAutoAdd(true);
                 setDefaultStatus('pending');
+                setPayeeId(null);
             }
         }
     }, [isOpen, initialData]);
@@ -150,6 +154,7 @@ export function RecurringForm({ isOpen, onClose, initialData, onSuccess }: Recur
                 max_instances: endCondition === 'count' ? (parseInt(maxInstances) || null) : null,
                 auto_add: autoAdd ? 1 : 0,
                 default_status: defaultStatus,
+                payee_id: type === 'transfer' ? null : (payeeId || null),
                 is_active: 1
             };
 
@@ -266,6 +271,13 @@ export function RecurringForm({ isOpen, onClose, initialData, onSuccess }: Recur
                                 <option key={acc.id} value={acc.id}>{acc.name}</option>
                             ))}
                         </select>
+                    </div>
+                )}
+
+                {/* Payee Selection */}
+                {type !== 'transfer' && (
+                    <div className="mb-4">
+                        <PayeePicker value={payeeId} onChange={setPayeeId} />
                     </div>
                 )}
 

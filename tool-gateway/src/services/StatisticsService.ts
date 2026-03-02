@@ -127,20 +127,30 @@ export const StatisticsService = {
 
         // 1. Starting Balance (Effective Balance: Posted + Pending)
         const accounts = all('SELECT initial_balance FROM accounts');
+        // Total system balance = Initial Balances + SUM(external income/expense)
+        // Transfers are movements between accounts and should not affect system total.
         const transactionsTotal = get<any>(
-            "SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE deleted_at IS NULL AND status != 'ignored'"
+            "SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE to_account_id IS NULL AND deleted_at IS NULL AND status != 'ignored'"
         );
         let startBalanceNow = accounts.reduce((sum: number, a: any) => sum + (a.initial_balance || 0), 0) + (transactionsTotal?.total || 0);
 
-        // 2. Current Month Actuals (Transactions already in DB for this month)
-        const currentMonthActuals = get<any>(
-            `SELECT 
+        // 2. All Monthly Actuals (Transactions already in DB)
+        const allActuals = all(`
+            SELECT month,
                 COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) as income,
                 COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) as expense
-             FROM transactions 
-             WHERE month = ? AND deleted_at IS NULL AND status != 'ignored' AND source != 'transfer'`,
-            [currentMonthStr]
-        );
+            FROM transactions 
+            WHERE deleted_at IS NULL AND status != 'ignored' AND source != 'transfer'
+            GROUP BY month
+        `) as any[];
+
+        const actualsMap: Record<string, { income: number; expense: number }> = {};
+        allActuals.forEach(row => {
+            actualsMap[row.month] = {
+                income: row.income || 0,
+                expense: row.expense || 0
+            };
+        });
 
         // 3. Variable Spending Baseline (Average of manual/non-automated spending)
         const avgManualIncome = 0;
@@ -150,8 +160,9 @@ export const StatisticsService = {
         const recurringRules = all('SELECT * FROM recurring_rules WHERE is_active = 1');
         const unpaidInstallments = all('SELECT * FROM installment_payments WHERE status != "paid" AND expense_transaction_id IS NULL AND linked_transaction_id IS NULL AND generated_transaction_id IS NULL');
 
-        // Fetch all current/future transactions to avoid double counting
-        const existingTxs = all('SELECT source, source_ref_id, date, category_id, sub_category_id, amount FROM transactions WHERE date >= ? AND deleted_at IS NULL AND status != "ignored"', [currentMonthStr + '-01']);
+        // Fetch all current/future/recent transactions to avoid double counting across all displayed months
+        const startHistoryStr = getNMonthsAgo(3);
+        const existingTxs = all('SELECT source, source_ref_id, date, category_id, sub_category_id, amount FROM transactions WHERE date >= ? AND deleted_at IS NULL AND status != "ignored"', [startHistoryStr + '-01']);
 
         // Track rule instance counts for max_instances limit
         const ruleInstanceCounts: Record<string, number> = {};
@@ -242,9 +253,10 @@ export const StatisticsService = {
             // Update balance: only add what is projected and hasn't happened yet
             runningBalance += (projIncome - projExpense);
 
-            // Row display: Actual (if current) + Projected
-            const displayIncome = (monthStr === currentMonthStr ? currentMonthActuals.income : 0) + projIncome;
-            const displayExpense = (monthStr === currentMonthStr ? currentMonthActuals.expense : 0) + projExpense;
+            // Row display: Actuals (for this month) + Projected (future items for this month)
+            const actuals = actualsMap[monthStr] || { income: 0, expense: 0 };
+            const displayIncome = actuals.income + projIncome;
+            const displayExpense = actuals.expense + projExpense;
 
             points.push({
                 month: monthStr,
@@ -386,9 +398,16 @@ export const StatisticsService = {
             else expenseLineItems.push(item);
         }
 
+        // 3. Calculate Balances
+        // For simplicity, closing balance = point from getForecast or similar logic
+        // But for details page, we can just fetch the projected balance at end of this month
+        const forecastPoints = this.getForecast(24); // Get a long enough forecast
+        const monthPoint = forecastPoints.find(p => p.month === targetMonthStr);
 
         return {
             month: targetMonthStr,
+            openingBalance: (monthPoint?.projectedBalance || 0) - (monthPoint?.income || 0) + (monthPoint?.expense || 0),
+            closingBalance: monthPoint?.projectedBalance || 0,
             income: {
                 total: incomeLineItems.reduce((s, i) => s + i.amount, 0),
                 items: incomeLineItems.sort((a, b) => a.date.localeCompare(b.date))

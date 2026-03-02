@@ -59,13 +59,13 @@ src/
 │   ├── auth/                 # AuthLock (password lock screen)
 │   ├── budget/               # Budget components
 │   ├── common/               # Toast, UndoProvider, DateProvider, MonthPicker, ConfirmDialog
-│   ├── dashboard/            # SummaryCards, charts, QuickActions
+│   ├── dashboard/            # SummaryCards (NetCashflow, PendingSummary w/ CTA, BudgetStatus), charts
 │   ├── installments/         # InstallmentForm
 │   ├── recurring/            # RecurringForm
 │   ├── settings/             # Data management, password, display settings
 │   ├── transactions/         # TransactionList, TransactionForm, CategoryPicker
 │   └── ui/                   # Reusable UI components
-├── pages/                    # 13 page components
+├── pages/                    # 14 page components
 │   ├── DashboardPage.tsx     # Trang chủ — thống kê tổng quan
 │   ├── AccountsPage.tsx      # Quản lý tài khoản
 │   ├── TransactionsPage.tsx  # Danh sách giao dịch
@@ -76,6 +76,7 @@ src/
 │   ├── BudgetPage.tsx        # Ngân sách
 │   ├── ForecastPage.tsx      # Dự báo tài chính
 │   ├── ForecastDetailPage.tsx # Chi tiết dự báo theo tháng
+│   ├── PayeePage.tsx         # Quản lý người nhận/người trả
 │   ├── TrendsPage.tsx        # Xu hướng và so sánh
 │   ├── AuditLogPage.tsx      # Nhật ký hoạt động
 │   └── SettingsPage.tsx      # Cài đặt
@@ -91,6 +92,7 @@ src/
 │   ├── ForecastService.ts       # Proxy → ToolExecutionService
 │   ├── SettingsService.ts       # Proxy → ToolExecutionService
 │   ├── AuditService.ts          # Proxy → ToolExecutionService
+│   ├── PayeeService.ts          # Proxy → ToolExecutionService
 │   ├── BackupService.ts         # Backup/restore logic
 │   └── ImportExportService.ts   # Import/export JSON
 └── utils/
@@ -126,7 +128,7 @@ flowchart TD
 | `/` | → `/dashboard` | Redirect |
 | `/dashboard` | `DashboardPage` | Thống kê tổng quan, biểu đồ |
 | `/accounts` | `AccountsPage` | CRUD tài khoản |
-| `/transactions` | `TransactionsPage` | Danh sách giao dịch |
+| `/transactions` | `TransactionsPage` | Danh sách giao dịch (hỗ trợ `?status=pending` query param) |
 | `/categories` | `CategoryPage` | Danh mục / danh mục con |
 | `/recurring` | `RecurringPage` | Quy tắc định kỳ |
 | `/installments` | `InstallmentPage` | Kế hoạch trả góp |
@@ -134,6 +136,7 @@ flowchart TD
 | `/budget` | `BudgetPage` | Ngân sách theo tháng |
 | `/forecast` | `ForecastPage` | Dự báo tài chính |
 | `/forecast/:month` | `ForecastDetailPage` | Chi tiết tháng |
+| `/payees` | `PayeePage` | Quản lý người nhận/người trả |
 | `/settings` | `SettingsPage` | Cài đặt hệ thống |
 | `/audit-logs` | `AuditLogPage` | Nhật ký kiểm tra |
 
@@ -182,6 +185,7 @@ tool-gateway/
 │   │   ├── analytics.ts       # Statistics & analytics queries
 │   │   ├── recurring.ts       # Recurring rules + instance generation
 │   │   ├── installments.ts    # Installment plans + payments
+│   │   ├── payees.ts          # Payee CRUD
 │   │   └── system.ts          # Settings, audit logs, import/export
 │   └── services/
 │       ├── AccountService.ts
@@ -190,6 +194,7 @@ tool-gateway/
 │       ├── BudgetService.ts
 │       ├── RecurringService.ts
 │       ├── InstallmentService.ts
+│       ├── PayeeService.ts
 │       └── StatisticsService.ts
 ├── data/
 │   └── mm2.db                 # SQLite database file
@@ -296,6 +301,7 @@ Tất cả endpoints nằm dưới prefix `/api/v1/`. Tool name = endpoint path.
 | POST | `/update_recurring_rule` | `update_recurring_rule` | 1 | Cập nhật quy tắc |
 | POST | `/trigger_recurring_instance` | `trigger_recurring_instance` | 1 | Trigger thủ công |
 | POST | `/generate_recurring_instances` | `generate_recurring_instances` | 1 | Tạo instances tự động |
+| POST | `/link_recurring_transaction` | `link_recurring_transaction` | 1 | Liên kết giao dịch thủ công |
 | DELETE | `/delete_recurring_rule` | `delete_recurring_rule` | 2 | Xóa quy tắc |
 
 #### Installments
@@ -303,10 +309,21 @@ Tất cả endpoints nằm dưới prefix `/api/v1/`. Tool name = endpoint path.
 |--------|----------|-----------|------|-------|
 | GET | `/get_installment_plans` | `get_installment_plans` | 0 | Danh sách kế hoạch |
 | GET | `/get_installment_schedule` | `get_installment_schedule` | 0 | Lịch thanh toán |
+| GET | `/get_pending_installment_count` | `get_pending_installment_count` | 0 | Số kỳ chờ thanh toán |
 | POST | `/create_installment_plan` | `create_installment_plan` | 1 | Tạo kế hoạch trả góp |
+| POST | `/update_installment_plan` | `update_installment_plan` | 1 | Cập nhật kế hoạch (tên, auto_add, default_status) |
 | POST | `/pay_installment` | `pay_installment` | 1 | Đánh dấu đã thanh toán |
-| POST | `/check_overdue_installments` | `check_overdue_installments` | 1 | Kiểm tra quá hạn |
+| POST | `/check_overdue_installments` | `check_overdue_installments` | 1 | Kiểm tra quá hạn + auto-add |
+| POST | `/link_installment_transaction` | `link_installment_transaction` | 1 | Liên kết giao dịch thủ công |
 | DELETE | `/delete_installment_plan` | `delete_installment_plan` | 2 | Xóa kế hoạch |
+
+#### Payees
+| Method | Endpoint | Tool Name | Tier | Mô tả |
+|--------|----------|-----------|------|-------|
+| GET | `/get_payees` | `get_payees` | 0 | Danh sách người nhận/trả |
+| POST | `/create_payee` | `create_payee` | 1 | Tạo payee |
+| POST | `/update_payee` | `update_payee` | 1 | Cập nhật payee |
+| POST | `/archive_payee` | `archive_payee` | 1 | Ẩn/hiện payee |
 
 #### System
 | Method | Endpoint | Tool Name | Tier | Mô tả |
@@ -488,8 +505,16 @@ erDiagram
 | `note` | TEXT | Ghi chú |
 
 #### `categories` / `sub_categories` — Danh mục
-- Category: [id](file:///d:/Projects/mm2/mcp-server/src/security.ts#11-29), `name` (UNIQUE), `sort_order`, `is_archived`
-- SubCategory: [id](file:///d:/Projects/mm2/mcp-server/src/security.ts#11-29), `category_id` (FK), `name`, `sort_order`, `is_archived`, UNIQUE(`category_id`, `name`)
+- Category: `id`, `name` (UNIQUE), `sort_order`, `is_archived`
+- SubCategory: `id`, `category_id` (FK), `name`, `sort_order`, `is_archived`, UNIQUE(`category_id`, `name`)
+
+#### `payees` — Người nhận/người trả
+| Column | Type | Mô tả |
+|--------|------|-------|
+| `id` | TEXT PK | UUID |
+| `name` | TEXT NOT NULL | Tên payee |
+| `normalized_name` | TEXT | Tên chuẩn hóa (lowercase) |
+| `is_archived` | INTEGER | 0 hoặc 1 |
 
 #### `transactions` — Giao dịch
 | Column | Type | Mô tả |
@@ -503,9 +528,10 @@ erDiagram
 | `category_id` | TEXT FK | Danh mục |
 | `sub_category_id` | TEXT FK | Danh mục con |
 | `status` | TEXT | `posted`, `pending`, `ignored` |
-| `source` | TEXT | `manual`, `recurring`, `installment`, [transfer](file:///d:/Projects/mm2/tool-gateway/src/services/TransactionService.ts#77-93) |
+| `source` | TEXT | `manual`, `recurring`, `installment`, `transfer` |
 | `source_ref_id` | TEXT | ID quy tắc/kế hoạch nguồn |
 | `is_split` | INTEGER | 0 hoặc 1 |
+| `payee_id` | TEXT FK | Người nhận/người trả |
 | `note` | TEXT | Ghi chú |
 | `deleted_at` | TEXT | Soft delete timestamp |
 
@@ -517,8 +543,10 @@ erDiagram
 
 #### `recurring_rules` — Quy tắc định kỳ
 - Frequency: `daily`, `weekly`, `biweekly`, `monthly`, `quarterly`, `yearly`
-- Type: `income`, `expense`, [transfer](file:///d:/Projects/mm2/tool-gateway/src/services/TransactionService.ts#77-93)
-- `auto_add`: tự động tạo giao dịch hay chờ trigger thủ công
+- Type: `income`, `expense`, `transfer`
+- `auto_add`: tự động tạo giao dịch hay chờ trigger thủ công (default: **ON**)
+- `default_status`: trạng thái mặc định cho giao dịch tự động tạo (default: **pending**)
+- `payee_id`: người nhận/người trả (FK → payees)
 - `is_active`: bật/tắt
 
 #### `recurring_instances` — Instances đã tạo
@@ -529,6 +557,9 @@ erDiagram
 - `credit_account_id`, `payment_source_account_id`
 - `total_amount`, `tenor_months`, `start_date`
 - `payment_category_id`, `payment_sub_category_id`
+- `auto_add`: tự động tạo giao dịch chi phí khi đến hạn (default: **ON**)
+- `default_status`: trạng thái mặc định cho giao dịch tự động tạo (default: **pending**)
+- `payee_id`: người nhận/người trả (FK → payees)
 
 #### `installment_payments` — Lịch thanh toán
 - Status: `upcoming`, `due`, `overdue`, `paid`
@@ -723,7 +754,7 @@ cd mcp-server && npm run build && npm start
 | **Kiến trúc** | 3-tier thin-client: SPA → REST API (Tool Gateway) → SQLite |
 | **Giao tiếp** | Client ↔ Gateway: REST/JSON over HTTP; AI ↔ MCP: MCP Protocol (Streamable HTTP) |
 | **Auth** | Client → Gateway: JWT; MCP → Server: Bearer Token |
-| **Database** | SQLite (sql.js trên server), 11 bảng, file-based persistence. Client không chứa DB |
+| **Database** | SQLite (sql.js trên server), 12 bảng, file-based persistence. Client không chứa DB |
 | **Security** | 3-tier system (Read / Write / Destructive), audit logging, approval guards |
 | **Client Mode** | Gateway-only (thin client). Local mode đã loại bỏ hoàn toàn (2026-02-28) |
 | **MCP** | Manifest-driven tool registration, ~50+ tools, auto schema generation |

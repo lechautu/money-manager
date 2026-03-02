@@ -21,6 +21,7 @@ async function main() {
     const { analyticsRoutes } = await import('./routes/analytics.js');
     const { recurringRoutes } = await import('./routes/recurring.js');
     const { installmentRoutes } = await import('./routes/installments.js');
+    const { payeeRoutes } = await import('./routes/payees.js');
     const { systemRoutes } = await import('./routes/system.js');
     const cors = (await import('cors')).default;
 
@@ -68,6 +69,7 @@ async function main() {
     app.use('/api/v1', analyticsRoutes);
     app.use('/api/v1', recurringRoutes);
     app.use('/api/v1', installmentRoutes);
+    app.use('/api/v1', payeeRoutes);
     app.use('/api/v1', systemRoutes);
 
     // --- Global Error Handler ---

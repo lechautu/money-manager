@@ -12,6 +12,7 @@ export interface InstallmentPlan {
     payment_category_id: string;
     payment_sub_category_id?: string;
     auto_add: number; // 0 or 1
+    default_status: 'posted' | 'pending';
     created_at: string;
     updated_at: string;
 }

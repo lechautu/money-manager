@@ -7,6 +7,7 @@ import { CategoryService } from '../../services/CategoryService';
 import type { Category, SubCategory } from '../../services/CategoryService';
 import { Modal } from '../ui/Modal';
 import { useToast } from '../common/Toast';
+import { PayeePicker } from '../common/PayeePicker';
 import { Plus, X } from 'lucide-react';
 import { formatDisplayDate } from '../../utils/dateUtils';
 
@@ -29,6 +30,7 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
     const [subCategoryId, setSubCategoryId] = useState('');
     const [note, setNote] = useState('');
     const [status, setStatus] = useState<'posted' | 'pending'>('posted');
+    const [payeeId, setPayeeId] = useState<string | null>(null);
 
     // Split State
     const [isSplit, setIsSplit] = useState(false);
@@ -65,6 +67,7 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
                 setSubCategoryId(initialData.sub_category_id || '');
                 setNote(initialData.note || '');
                 setStatus(initialData.status as any);
+                setPayeeId(initialData.payee_id || null);
 
                 if (initialData.is_split) {
                     setIsSplit(true);
@@ -97,6 +100,7 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
                 setSubCategoryId(def.sub_category_id || '');
                 setNote(def.note || '');
                 setStatus((def.status as any) || 'posted');
+                setPayeeId(def.payee_id || null);
             } else {
                 // Defaults
                 setDate(new Date().toISOString().split('T')[0]);
@@ -267,6 +271,7 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
                     status,
                     month: date.slice(0, 7),
                     source: initialData.source, // Preserve source
+                    payee_id: type === 'transfer' ? null : (payeeId || null),
                     is_split: isSplit ? 1 : 0,
                     splitLines: isSplit ? splitLines.map(l => ({
                         category_id: l.categoryId,
@@ -296,6 +301,7 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
                         status,
                         month: date.slice(0, 7),
                         source: defaultValues?.source || 'manual',
+                        payee_id: payeeId || null,
                         is_split: isSplit ? 1 : 0,
                         splitLines: isSplit ? splitLines.map(l => ({
                             category_id: l.categoryId,
@@ -508,6 +514,13 @@ export function TransactionForm({ isOpen, onClose, initialData, defaultValues, o
                                 className={`w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary ${isReadOnly('amount') ? 'opacity-50' : ''}`}
                             />
                         </div>
+
+                        {/* Payee Selection */}
+                        {type !== 'transfer' && (
+                            <div className="mb-4">
+                                <PayeePicker value={payeeId} onChange={setPayeeId} />
+                            </div>
+                        )}
 
                         {/* Category Selection */}
                         {type !== 'transfer' && (
