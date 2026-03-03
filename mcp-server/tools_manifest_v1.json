@@ -1425,6 +1425,49 @@
             "description": "Lấy số lượng các kỳ trả góp đang chờ xác nhận (pending).",
             "parameters": {},
             "tier": 0
+        },
+        {
+            "name": "get_pending_recurring_count",
+            "category": "Recurring",
+            "description": "Lấy số lượng các phiên bản giao dịch định kỳ chưa được xử lý (chưa tạo transaction).",
+            "parameters": {},
+            "tier": 0
+        },
+        {
+            "name": "set_password",
+            "category": "System",
+            "description": "Thiết lập mật khẩu bảo vệ cho ứng dụng.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "password": {
+                        "type": "string",
+                        "description": "Mật khẩu mới"
+                    }
+                },
+                "required": [
+                    "password"
+                ]
+            },
+            "tier": 1
+        },
+        {
+            "name": "verify_password",
+            "category": "System",
+            "description": "Xác minh mật khẩu hiện tại.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "password": {
+                        "type": "string",
+                        "description": "Mật khẩu cần kiểm tra"
+                    }
+                },
+                "required": [
+                    "password"
+                ]
+            },
+            "tier": 0
         }
     ]
 }

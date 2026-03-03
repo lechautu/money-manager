@@ -4,7 +4,7 @@ Tài liệu này quy định chính sách thực thi (Execution Policy) và phâ
 
 ## Phân loại Tier (Security Tiers)
 
-1. **Tier 0 (Read-only)**
+1. **Tier 0 (Read-only)** — 27 tools
    - **Mô tả**: Các tool chỉ thực hiện truy vấn, đọc dữ liệu, không làm thay đổi trạng thái của hệ thống.
    - **Chính sách**: Chạy **không cần confirm** từ user (chạy trực tiếp).
    - **Danh sách tool**:
@@ -13,9 +13,12 @@ Tài liệu này quy định chính sách thực thi (Execution Policy) và phâ
      - `search_transactions`
      - `get_recurring_rules`
      - `get_recurring_instances`
+     - `get_pending_recurring_count`
      - `get_installment_plans`
      - `get_installment_schedule`
+     - `get_pending_installment_count`
      - `get_categories`
+     - `get_payees`
      - `get_budgets`
      - `get_spending_analytics`
      - `get_financial_forecast`
@@ -25,16 +28,15 @@ Tài liệu này quy định chính sách thực thi (Execution Policy) và phâ
      - `get_cashflow_trend`
      - `get_daily_spending`
      - `get_category_movers`
-     - `get_payees`
      - `get_pending_summary`
-     - `get_pending_installment_count`
      - `get_upcoming_payments`
      - `get_audit_logs`
      - `export_system_data`
      - `get_settings`
      - `has_password`
+     - `verify_password`
 
-2. **Tier 1 (Write/Update)**
+2. **Tier 1 (Write/Update)** — 32 tools
    - **Mô tả**: Các tool thực hiện thêm mới, chỉnh sửa trạng thái hệ thống nhưng không phá hủy dữ liệu (non-destructive).
    - **Chính sách**: Chỉ cần **validate** dữ liệu hợp lệ (AI có thể tự quyết định thực hiện nếu tham số chuẩn xác hoặc cơ chế backend tự validate).
    - **Danh sách tool**:
@@ -58,19 +60,20 @@ Tài liệu này quy định chính sách thực thi (Execution Policy) và phâ
      - `update_recurring_rule`
      - `trigger_recurring_instance`
      - `generate_recurring_instances`
+     - `link_recurring_transaction`
      - `create_installment_plan`
      - `update_installment_plan`
      - `pay_installment`
      - `check_overdue_installments`
      - `link_installment_transaction`
-     - `link_recurring_transaction`
      - `set_category_budget`
      - `clone_month_budget`
      - `generate_budgets_from_automation`
      - `set_date_format`
      - `set_lock_enabled`
+     - `set_password`
 
-3. **Tier 2 (Destructive/Sensitive)**
+3. **Tier 2 (Destructive/Sensitive)** — 10 tools
    - **Mô tả**: Các tool có khả năng xóa dữ liệu (ngay cả xóa đơn) hoặc ghi đè toàn bộ dữ liệu hệ thống.
    - **Chính sách**: **Yêu cầu user confirm** rõ ràng trước khi thực hiện.
    - **Danh sách tool**:
@@ -84,3 +87,7 @@ Tài liệu này quy định chính sách thực thi (Execution Policy) và phâ
      - `delete_budget`
      - `clear_month_budgets`
      - `import_system_data`
+
+---
+
+**Tổng cộng: 69 tools** (Tier 0: 27 | Tier 1: 32 | Tier 2: 10)

@@ -2,7 +2,7 @@
 
 ## 1. Tổng quan hệ thống
 
-Money Manager 2 (MM2) là ứng dụng quản lý tài chính cá nhân được thiết kế theo kiến trúc **3-tier (thin-client)**, bao gồm:
+Money Manager 2 (MM2) là ứng dụng quản lý tài chính cá nhân được thiết kế theo kiến trúc **4-tier**, bao gồm:
 
 ```mermaid
 graph LR
@@ -10,9 +10,17 @@ graph LR
         Client["Client (React SPA)"]
     end
 
+    subgraph "AI Layer"
+        AIGateway["AI Gateway\n:3300"]
+    end
+
     subgraph "Backend Services"
         Gateway["Tool Gateway\n:3200"]
         MCP["MCP Server\n:3100"]
+    end
+
+    subgraph "External"
+        LLM["LLM Provider\n(OpenAI, etc.)"]
     end
 
     subgraph "Storage"
@@ -20,17 +28,21 @@ graph LR
     end
 
     Client -- "REST API\n(JWT Auth)" --> Gateway
+    Client -. "REST API\n(/ai/chat)" .-> AIGateway
+    AIGateway -- "MCP Protocol\n(JSON-RPC over HTTP)" --> MCP
+    AIGateway -- "Chat Completions\n(OpenAI-compatible)" --> LLM
     MCP -- "REST Proxy\n(Bearer Token)" --> Gateway
     Gateway -- "Read/Write" --> DB
 
-    AI["AI Agent\n(Claude, Gemini, etc.)"] -- "MCP Protocol\n(Streamable HTTP)" --> MCP
+    ExtAI["External AI Agent\n(Claude Desktop, etc.)"] -- "MCP Protocol\n(Streamable HTTP)" --> MCP
 ```
 
 | Component | Tech Stack | Port | Vai trò |
 |-----------|-----------|------|---------|
 | **Client** | React 19, Vite 7, TailwindCSS 4, TypeScript | `:5173` (dev) | Giao diện người dùng (thin-client SPA) |
+| **AI Gateway** | Express 5, OpenAI SDK, TypeScript | `:3300` | LLM Orchestrator — chat API cho Client, điều phối tool call qua MCP |
 | **Tool Gateway** | Express 5, sql.js, JWT, TypeScript | `:3200` | REST API, business logic, data layer |
-| **MCP Server** | `@modelcontextprotocol/sdk`, Express 5, TypeScript | `:3100` | Cung cấp giao diện MCP cho AI agents |
+| **MCP Server** | `@modelcontextprotocol/sdk`, Express 5, TypeScript | `:3100` | Cung cấp giao diện MCP cho AI Gateway và external AI agents |
 
 ---
 
@@ -370,16 +382,136 @@ Wrapper cho sql.js cung cấp các helper:
 
 ---
 
-## 4. MCP Server
+## 4. AI Gateway (LLM Orchestrator)
 
 ### 4.1 Công nghệ
+
+- **Runtime**: Node.js
+- **Framework**: Express 5
+- **LLM SDK**: OpenAI SDK (tương thích mọi provider OpenAI-compatible)
+- **MCP Client**: HTTP JSON-RPC trực tiếp (không dùng SDK transport)
+
+### 4.2 Cấu trúc thư mục
+
+```
+ai-gateway/
+├── src/
+│   ├── server.ts              # Entry point, Express app, Origin Guard
+│   ├── orchestrator.ts        # ★ Core: LLM loop (prompt → tool calls → MCP → result)
+│   ├── mcpClient.ts           # MCP JSON-RPC client (init → tools/list → tools/call)
+│   ├── llmProvider.ts         # OpenAI SDK wrapper + MCP→OpenAI schema conversion
+│   ├── sessionStore.ts        # Session CRUD + JSON file persistence + TTL
+│   ├── approvalManager.ts     # Approval token create/validate (Tier 2)
+│   ├── routes.ts              # /ai/chat, /ai/approve, /ai/session/:id
+│   └── logger.ts              # Structured JSON logging with redaction
+├── data/
+│   └── sessions.json          # Session persistence
+└── .env
+```
+
+### 4.3 Kiến trúc — MCP-First Orchestration
+
+AI Gateway tuân thủ nguyên tắc **MCP-First**: mọi tool execution đều đi qua MCP Server, không bao giờ gọi trực tiếp Tool Gateway.
+
+```mermaid
+sequenceDiagram
+    participant User as Client
+    participant AG as AI Gateway
+    participant LLM as OpenAI (LLM)
+    participant MCP as MCP Server
+    participant TG as Tool Gateway
+
+    User->>AG: POST /ai/chat {message}
+    AG->>AG: Load session + build system prompt
+    AG->>LLM: Chat Completion (messages + 69 tools)
+    LLM-->>AG: "Call get_accounts()"
+    AG->>MCP: tools/call {name: "get_accounts"}
+    MCP->>TG: GET /api/v1/get_accounts
+    TG-->>MCP: {data: [...]}
+    MCP-->>AG: {content: [{type: "text", text: "[...]"}]}
+    AG->>LLM: Tool result → Continue
+    LLM-->>AG: "Bạn có 3 tài khoản..."
+    AG-->>User: {assistantMessage: "Bạn có 3 tài khoản..."}
+```
+
+> [!IMPORTANT]
+> OpenAI **không hề biết** MCP Server tồn tại. AI Gateway gửi danh sách 69 tool definitions (chuyển từ MCP schema sang OpenAI function format) trong mỗi request. Khi OpenAI quyết định gọi tool, AI Gateway nhận yêu cầu đó và thực hiện qua MCP.
+
+### 4.4 Core Modules
+
+#### Orchestrator ([orchestrator.ts](file:///d:/Projects/mm2/ai-gateway/src/orchestrator.ts))
+- **Vòng lặp chính**: System prompt → User message → LLM → Tool calls → MCP execute → LLM → ... → Final text
+- **Budget enforcement**: max `MAX_TOOL_CALLS_PER_TURN` (8) tool calls, max `MAX_TURN_WALL_TIME_MS` (25s) wall time
+- **State management**: Session states: `IDLE` → `TOOL_CALLING` → `PENDING_APPROVAL` / `DONE`
+
+#### MCP Client ([mcpClient.ts](file:///d:/Projects/mm2/ai-gateway/src/mcpClient.ts))
+- HTTP JSON-RPC trực tiếp đến MCP Server (`POST /mcp`)
+- 3-step handshake: `initialize` → `notifications/initialized` → `tools/list`
+- SSE response parsing cho JSON-RPC over Streamable HTTP
+- Capture `mcp-session-id` header để duy trì session
+
+#### LLM Provider ([llmProvider.ts](file:///d:/Projects/mm2/ai-gateway/src/llmProvider.ts))
+- Wrapper cho OpenAI SDK, provider-agnostic (hỗ trợ bất kỳ OpenAI-compatible API)
+- Chuyển đổi MCP tool schema → OpenAI function format
+- Retry logic với exponential backoff
+
+#### Approval Manager ([approvalManager.ts](file:///d:/Projects/mm2/ai-gateway/src/approvalManager.ts))
+- Tạo opaque approval token (SHA-256 hash của tool name + args)
+- TTL enforcement (default 5 phút)
+- Single-use: token bị xóa sau khi validate thành công
+
+### 4.5 API Endpoints
+
+| Method | Endpoint | Mô tả |
+|--------|----------|-------|
+| POST | `/ai/chat` | Chat: gửi tin nhắn, nhận phản hồi AI (có thể kèm tool calls) |
+| POST | `/ai/approve` | Xác nhận thao tác Tier 2 bằng approval token |
+| GET | `/ai/session/:id` | Debug: xem trạng thái session |
+| GET | `/healthz` | Health check (kèm trạng thái MCP connection) |
+| GET | `/version` | Version info |
+
+### 4.6 Session Management
+
+- JSON file persistence (`data/sessions.json`)
+- TTL: 7 ngày (configurable)
+- Conversation trimming: giữ tối đa 40 messages gần nhất
+- States: `IDLE`, `TOOL_CALLING`, `PENDING_APPROVAL`, `DONE`
+
+### 4.7 Security
+
+- **Loopback binding**: chỉ lắng nghe trên `127.0.0.1`
+- **Origin Guard**: validate `Origin` header cho mọi request state-changing (`POST/PUT/PATCH/DELETE`)
+- **MCP Auth**: gửi `Authorization: Bearer <MCP_BEARER>` + `x-user-id: ai-gateway` khi gọi MCP Server
+
+### 4.8 Environment Variables
+
+| Variable | Default | Mô tả |
+|----------|---------|-------|
+| `PORT` | `3300` | Cổng HTTP |
+| `AI_GATEWAY_HOST` | `127.0.0.1` | Bind address |
+| `LLM_API_KEY` | — | API Key cho LLM provider |
+| `LLM_BASE_URL` | `https://api.openai.com/v1` | Base URL LLM (đổi để dùng provider khác) |
+| `LLM_MODEL` | `gpt-4o` | Model name |
+| `MCP_SERVER_URL` | `http://localhost:3100` | URL MCP Server |
+| `MCP_BEARER` | — | Bearer token cho MCP auth |
+| `TRUSTED_ORIGINS` | `http://localhost:5173,...` | Origins được phép gọi API |
+| `SESSION_TTL_MS` | `604800000` | TTL session (7 ngày) |
+| `APPROVAL_TOKEN_TTL_MS` | `300000` | TTL approval token (5 phút) |
+| `MAX_TOOL_CALLS_PER_TURN` | `8` | Giới hạn tool calls mỗi lượt |
+| `MAX_TURN_WALL_TIME_MS` | `25000` | Giới hạn thời gian mỗi lượt |
+
+---
+
+## 5. MCP Server
+
+### 5.1 Công nghệ
 
 - **MCP SDK**: `@modelcontextprotocol/sdk` 1.12
 - **Transport**: Streamable HTTP (SSE cho server → client)
 - **Framework**: Express 5
 - **Schema**: Zod (dynamic schema generation từ manifest)
 
-### 4.2 Cấu trúc thư mục
+### 5.2 Cấu trúc thư mục
 
 ```
 mcp-server/
@@ -389,16 +521,16 @@ mcp-server/
 │   ├── proxy.ts               # executeToolViaGateway() — proxy HTTP calls
 │   ├── security.ts            # Auth + Identity + Approval guard middleware
 │   └── logger.ts              # Structured JSON logging with redaction
-├── tools_manifest_v1.json     # ★ Tool definitions (38KB, ~50+ tools)
+├── tools_manifest_v1.json     # ★ Tool definitions (47KB, 69 tools)
 └── .env
 ```
 
-### 4.3 Kiến trúc
+### 5.3 Kiến trúc
 
 ```mermaid
 flowchart TD
-    AI["AI Agent"] -->|"MCP Protocol\n(POST /mcp)"| Transport["StreamableHTTPServerTransport"]
-    Transport --> McpServer["McpServer\n(tool dispatch)"]
+    AI["AI Gateway / External Agent"] -->|"MCP Protocol\n(POST /mcp)"| Transport["StreamableHTTPServerTransport"]
+    Transport --> McpServer["McpServer\n(per-session instance)"]
     McpServer --> ToolHandler["Tool Handler\n(per-tool callback)"]
     ToolHandler --> Proxy["executeToolViaGateway()"]
     Proxy -->|"HTTP REST\n(method auto-detect)"| GW["Tool Gateway :3200"]
@@ -407,7 +539,10 @@ flowchart TD
     Proxy --> Content["MCP Content\n(text/json)"]
 ```
 
-### 4.4 Tool Registry ([toolRegistry.ts](file:///d:/Projects/mm2/mcp-server/src/toolRegistry.ts))
+> [!NOTE]
+> MCP Server sử dụng factory pattern (`createMcpServerInstance()`) để tạo một `McpServer` instance riêng cho mỗi session, cho phép nhiều client (AI Gateway + Claude Desktop) kết nối đồng thời.
+
+### 5.4 Tool Registry ([toolRegistry.ts](file:///d:/Projects/mm2/mcp-server/src/toolRegistry.ts))
 
 Đọc file [tools_manifest_v1.json](file:///d:/Projects/mm2/mcp-server/tools_manifest_v1.json) và:
 1. **Validate** tên tool duy nhất, tier hợp lệ (0/1/2), parameters hợp lệ
@@ -417,7 +552,7 @@ flowchart TD
    - Tier 1: `destructiveHint: false`
    - Tier 2: `destructiveHint: true`
 
-### 4.5 Proxy ([proxy.ts](file:///d:/Projects/mm2/mcp-server/src/proxy.ts))
+### 5.5 Proxy ([proxy.ts](file:///d:/Projects/mm2/mcp-server/src/proxy.ts))
 
 [executeToolViaGateway(toolName, args, context)](file:///d:/Projects/mm2/mcp-server/src/proxy.ts#14-129):
 - Tự động xác định HTTP method:
@@ -428,7 +563,7 @@ flowchart TD
 - Headers: `x-user-id`, `x-request-id`, `idempotency-key` (optional), `x-mm-approval` (optional)
 - Timeout: configurable (`REQUEST_TIMEOUT_MS`, default 30s)
 
-### 4.6 Security ([security.ts](file:///d:/Projects/mm2/mcp-server/src/security.ts))
+### 5.6 Security ([security.ts](file:///d:/Projects/mm2/mcp-server/src/security.ts))
 
 | Middleware | Mô tả |
 |-----------|-------|
@@ -440,22 +575,23 @@ Approval guard hỗ trợ deny/allow lists qua env:
 - `APPROVAL_GUARD_DENYLIST`: luôn yêu cầu approval
 - `APPROVAL_GUARD_ALLOWLIST`: bỏ qua approval check
 
-### 4.7 Session Management
+### 5.7 Multi-Session Management
 
-- Mỗi MCP connection tạo một `StreamableHTTPServerTransport` với [sessionId](file:///d:/Projects/mm2/mcp-server/src/server.ts#144-145) (UUID)
-- Sessions tracked trong `Map<string, Transport>`
+- Mỗi MCP connection tạo một `StreamableHTTPServerTransport` với sessionId (UUID)
+- Factory pattern: `createMcpServerInstance()` tạo McpServer mới cho mỗi session
+- Transport stored trong `Map<string, Transport>` **sau** `handleRequest()` (đảm bảo sessionId đã được gán)
 - Hỗ trợ:
   - `POST /mcp`: Gửi message (tạo session mới hoặc gắn vào session hiện tại)
   - `GET /mcp`: SSE stream (server → client notifications)
   - `DELETE /mcp`: Kết thúc session
 
-### 4.8 Logger ([logger.ts](file:///d:/Projects/mm2/mcp-server/src/logger.ts))
+### 5.8 Logger ([logger.ts](file:///d:/Projects/mm2/mcp-server/src/logger.ts))
 
 - Structured JSON output
 - Redacts sensitive fields: `amount`, `total_amount`, `initial_balance`, `note`, `fileContent`, `password`
 - Configurable log level: `debug` / `info` / `warn` / `error`
 
-### 4.9 Environment Variables
+### 5.9 Environment Variables
 
 | Variable | Default | Mô tả |
 |----------|---------|-------|
@@ -469,7 +605,7 @@ Approval guard hỗ trợ deny/allow lists qua env:
 
 ---
 
-## 5. Data Model
+## 6. Data Model
 
 ### 5.1 Entity-Relationship Diagram
 
@@ -582,7 +718,7 @@ erDiagram
 
 ---
 
-## 6. Security Model
+## 7. Security Model
 
 ### 6.1 Tier System
 
@@ -597,9 +733,11 @@ erDiagram
 ```mermaid
 sequenceDiagram
     participant C as Client
+    participant AG as AI Gateway
+    participant LLM as LLM Provider
     participant GW as Tool Gateway
     participant MCP as MCP Server
-    participant AI as AI Agent
+    participant AI as External AI Agent
 
     Note over C,GW: Client → Gateway (Direct)
     C->>GW: POST /api/v1/record_transaction
@@ -609,12 +747,26 @@ sequenceDiagram
     GW->>GW: Execute business logic
     GW-->>C: 200 OK {data: ...}
 
-    Note over AI,MCP: AI Agent → MCP → Gateway
+    Note over C,AG: Client → AI Gateway → MCP → Gateway
+    C->>AG: POST /ai/chat {message}
+    AG->>LLM: Chat Completions (messages + tools)
+    LLM-->>AG: tool_call: record_transaction
+    AG->>MCP: MCP tools/call (record_transaction)
+    Note right of AG: Authorization: Bearer <MCP_BEARER>
+    MCP->>MCP: Verify MCP_BEARER
+    MCP->>GW: POST /api/v1/record_transaction
+    GW->>GW: Execute business logic
+    GW-->>MCP: 200 OK
+    MCP-->>AG: MCP response
+    AG->>LLM: Tool result
+    LLM-->>AG: "Đã ghi nhận giao dịch..."
+    AG-->>C: {assistantMessage: "Đã ghi nhận..."}
+
+    Note over AI,MCP: External AI → MCP → Gateway (Direct MCP)
     AI->>MCP: MCP tools/call (record_transaction)
     Note right of AI: Authorization: Bearer <MCP_BEARER>
     MCP->>MCP: Verify MCP_BEARER
     MCP->>GW: POST /api/v1/record_transaction
-    Note right of MCP: x-user-id, x-request-id
     GW->>GW: Execute business logic
     GW-->>MCP: 200 OK
     MCP-->>AI: MCP response {content: [...]}
@@ -650,7 +802,7 @@ sequenceDiagram
 
 ---
 
-## 7. Data Flow
+## 8. Data Flow
 
 ### 7.1 Client → Gateway
 
@@ -678,31 +830,37 @@ sequenceDiagram
     DS-->>UI: Transaction object
 ```
 
-### 7.2 AI Agent → MCP → Gateway
+### 8.2 Client → AI Gateway → MCP → Gateway
 
 ```mermaid
 sequenceDiagram
-    participant AI as AI Agent
+    participant User as React Component
+    participant AG as AI Gateway
+    participant LLM as OpenAI
     participant MCP as MCP Server
     participant Proxy as proxy.ts
     participant GW as Tool Gateway
 
-    AI->>MCP: tools/call {name: "search_transactions", args: {month: "2026-02"}}
-    MCP->>MCP: Resolve tool from manifest
-    MCP->>Proxy: executeToolViaGateway("search_transactions", {month: "2026-02"})
-    Proxy->>Proxy: Detect method: GET (starts with "search_")
+    User->>AG: POST /ai/chat {message: "Tháng 2 chi bao nhiêu?"}
+    AG->>AG: Load session, build system prompt
+    AG->>LLM: Chat Completions (messages + 69 tool defs)
+    LLM-->>AG: tool_call: search_transactions({month: "2026-02"})
+    AG->>MCP: tools/call {name: "search_transactions", args: {month: "2026-02"}}
+    MCP->>Proxy: executeToolViaGateway()
     Proxy->>GW: GET /api/v1/search_transactions?month=2026-02
-    GW->>GW: Auth → Handler
     GW-->>Proxy: {data: [...]}
     Proxy-->>MCP: {ok: true, data: [...]}
-    MCP-->>AI: {content: [{type: "text", text: "[...]"}]}
+    MCP-->>AG: {content: [{type: "text", text: "[...]"}]}
+    AG->>LLM: Tool result → Continue
+    LLM-->>AG: "Tháng 2 bạn chi 15.000.000đ..."
+    AG-->>User: {assistantMessage: "Tháng 2 bạn chi 15.000.000đ..."}
 ```
 
 ---
 
-## 8. Deployment
+## 9. Deployment
 
-### 8.1 Development
+### 9.1 Development
 
 ```bash
 # Terminal 1: Client (Vite dev server)
@@ -713,12 +871,16 @@ npm run dev                    # → http://localhost:5173
 cd d:\Projects\mm2\tool-gateway
 npm run dev                    # → http://localhost:3200
 
-# Terminal 3: MCP Server (optional, for AI integration)
+# Terminal 3: MCP Server
 cd d:\Projects\mm2\mcp-server
 npm run dev                    # → http://localhost:3100
+
+# Terminal 4: AI Gateway
+cd d:\Projects\mm2\ai-gateway
+npm run dev                    # → http://localhost:3300
 ```
 
-### 8.2 Production Build
+### 9.2 Production Build
 
 ```bash
 # Client
@@ -729,34 +891,39 @@ cd tool-gateway && npm run build && npm start
 
 # MCP Server
 cd mcp-server && npm run build && npm start
+
+# AI Gateway
+cd ai-gateway && npm run build && npm start
 ```
 
-### 8.3 Topology
+### 9.3 Topology
 
 ```
-┌──────────┐     ┌──────────────┐     ┌──────────┐
-│  Browser  │────▶│ Tool Gateway │◀────│MCP Server│
-│  (Vite)   │     │   (:3200)    │     │ (:3100)  │
-│  :5173    │     │              │     │          │◀── AI Agents
-└──────────┘     │  ┌────────┐  │     └──────────┘
-                  │  │ SQLite │  │
-                  │  │ (file) │  │
-                  │  └────────┘  │
-                  └──────────────┘
+┌──────────┐     ┌──────────────┐     ┌──────────┐     ┌──────────────┐
+│  Browser  │────▶│ Tool Gateway │◀────│MCP Server│◀────│  AI Gateway  │
+│  (Vite)   │     │   (:3200)    │     │ (:3100)  │     │   (:3300)    │
+│  :5173    │     │              │     │          │     │              │
+│           │·····│·····(chat)···│·····│··········│·····│──▶ OpenAI    │
+└──────────┘     │  ┌────────┐  │     │          │◀──┐ └──────────────┘
+       │          │  │ SQLite │  │     └──────────┘   │
+       └─(chat)──▶│  │ (file) │  │                    │ External AI
+                  │  └────────┘  │                    │ (Claude, etc.)
+                  └──────────────┘                    └───────────────
 ```
 
 ---
 
-## 9. Tóm tắt kiến trúc
+## 10. Tóm tắt kiến trúc
 
 | Khía cạnh | Chi tiết |
 |-----------|----------|
-| **Kiến trúc** | 3-tier thin-client: SPA → REST API (Tool Gateway) → SQLite |
-| **Giao tiếp** | Client ↔ Gateway: REST/JSON over HTTP; AI ↔ MCP: MCP Protocol (Streamable HTTP) |
-| **Auth** | Client → Gateway: JWT; MCP → Server: Bearer Token |
+| **Kiến trúc** | 4-tier: SPA → AI Gateway → MCP Server → Tool Gateway → SQLite |
+| **Giao tiếp** | Client ↔ Gateway: REST/JSON; Client ↔ AI Gateway: REST/JSON; AI Gateway ↔ MCP: JSON-RPC; AI Gateway ↔ LLM: OpenAI API |
+| **Auth** | Client → Gateway: JWT; AI Gateway → MCP: Bearer Token; AI Gateway → LLM: API Key |
 | **Database** | SQLite (sql.js trên server), 12 bảng, file-based persistence. Client không chứa DB |
-| **Security** | 3-tier system (Read / Write / Destructive), audit logging, approval guards |
+| **Security** | 3-tier system (Read / Write / Destructive), audit logging, approval guards, origin guard |
 | **Client Mode** | Gateway-only (thin client). Local mode đã loại bỏ hoàn toàn (2026-02-28) |
-| **MCP** | Manifest-driven tool registration, ~50+ tools, auto schema generation |
+| **MCP** | Manifest-driven tool registration, 69 tools, auto schema generation, multi-session support |
+| **AI Gateway** | MCP-First orchestrator, OpenAI-compatible LLM, session persistence, Tier 2 approval flow |
 | **Soft Delete** | Transactions sử dụng `deleted_at` thay vì xóa thật |
 | **Idempotency** | Hỗ trợ `idempotency_keys` table cho API calls |

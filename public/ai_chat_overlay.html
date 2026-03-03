@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2b8cee",
+                        "background-light": "#f6f7f8",
+                        "background-dark": "#101922",
+                        "navy-deep": "#0A1128",
+                    },
+                    fontFamily: {
+                        "display": ["Manrope", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<title>Financial Dashboard - AI Assistant</title>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 antialiased overflow-hidden">
+<!-- Main Dashboard Layer (Dimmed Background) -->
+<div class="relative flex h-screen w-full flex-col bg-background-dark brightness-[0.4] grayscale-[0.2]">
+<div class="layout-container flex h-full grow flex-col">
+<div class="flex flex-1">
+<!-- Side Bar -->
+<aside class="w-64 border-r border-slate-800 flex flex-col p-4 gap-6">
+<div class="flex gap-3 items-center">
+<div class="bg-primary rounded-full size-10 flex items-center justify-center">
+<span class="material-symbols-outlined text-white">account_balance</span>
+</div>
+<div class="flex flex-col">
+<h1 class="text-white text-base font-bold leading-none">WealthManager</h1>
+<p class="text-slate-400 text-xs mt-1">Professional Suite</p>
+</div>
+</div>
+<nav class="flex flex-col gap-2">
+<div class="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary/20 text-primary">
+<span class="material-symbols-outlined">dashboard</span>
+<p class="text-sm font-medium">Dashboard</p>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 text-slate-400">
+<span class="material-symbols-outlined">pie_chart</span>
+<p class="text-sm font-medium">Portfolio</p>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 text-slate-400">
+<span class="material-symbols-outlined">account_balance_wallet</span>
+<p class="text-sm font-medium">Budget</p>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 text-slate-400">
+<span class="material-symbols-outlined">bar_chart</span>
+<p class="text-sm font-medium">Reports</p>
+</div>
+</nav>
+</aside>
+<!-- Content Area -->
+<main class="flex-1 flex flex-col overflow-y-auto">
+<header class="flex items-center justify-between px-8 py-4 border-b border-slate-800">
+<div class="flex items-center gap-8">
+<h2 class="text-xl font-bold">Financial Overview</h2>
+<nav class="flex gap-6 text-sm font-medium text-slate-400">
+<a class="text-white" href="#">Overview</a>
+<a href="#">Markets</a>
+<a href="#">News</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">search</span>
+<input class="bg-slate-800 border-none rounded-lg pl-10 pr-4 py-2 text-sm w-64" placeholder="Search assets..." type="text"/>
+</div>
+<button class="p-2 rounded-lg bg-slate-800"><span class="material-symbols-outlined text-lg">notifications</span></button>
+<div class="size-10 rounded-full bg-slate-700 overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="User profile picture" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA2hwBlmz2xNiXQs1K9PsPXR0AyuoGejgIsdWR-0YtWFjrseDqveRZAlSsMH5Vtz7uth89GQ94_9iM1LS6RBGDin4WygTWv3vQ2dA60eCKzbkJ_x0dM1aIBgK_6-oSXKL5RgmdWG0XhZVw7AoLz983wb4GervszGwcmFTErkDPSge5hCTpEIADYsLiKZq-o9JEKCQ2Ro6UsrEf56K1tRPyXcHGMcyZxPjpkTv5-mdygaqIg3IoYNN3EU6OSCFQnxCaP_WfW8kmUAw"/>
+</div>
+</div>
+</header>
+<div class="p-8 space-y-8">
+<div class="grid grid-cols-3 gap-6">
+<div class="p-6 rounded-xl border border-slate-800 bg-slate-900/50">
+<p class="text-slate-400 text-sm">Total Balance</p>
+<h3 class="text-3xl font-bold mt-1">$124,500.00</h3>
+<p class="text-emerald-500 text-sm mt-2 flex items-center gap-1 font-medium">
+<span class="material-symbols-outlined text-xs">arrow_upward</span> +2.4%
+                                </p>
+</div>
+<div class="p-6 rounded-xl border border-slate-800 bg-slate-900/50">
+<p class="text-slate-400 text-sm">Monthly ROI</p>
+<h3 class="text-3xl font-bold mt-1">+12.5%</h3>
+<p class="text-emerald-500 text-sm mt-2 flex items-center gap-1 font-medium">
+<span class="material-symbols-outlined text-xs">arrow_upward</span> +0.8%
+                                </p>
+</div>
+<div class="p-6 rounded-xl border border-slate-800 bg-slate-900/50">
+<p class="text-slate-400 text-sm">Risk Score</p>
+<h3 class="text-3xl font-bold mt-1">Low</h3>
+<p class="text-orange-500 text-sm mt-2 flex items-center gap-1 font-medium">
+                                    Stable
+                                </p>
+</div>
+</div>
+<div class="h-64 rounded-xl border border-slate-800 bg-slate-900/50 flex items-center justify-center">
+<p class="text-slate-600">Chart visualization area</p>
+</div>
+</div>
+</main>
+</div>
+</div>
+</div>
+<!-- AI Chat Overlay -->
+<div class="fixed top-4 right-4 bottom-24 w-96 flex flex-col bg-navy-deep/90 backdrop-blur-xl border border-primary/20 rounded-2xl shadow-2xl overflow-hidden z-50">
+<!-- Chat Header -->
+<div class="flex items-center justify-between p-4 border-b border-primary/10 bg-primary/5">
+<div class="flex items-center gap-3">
+<div class="size-10 rounded-full bg-primary/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary font-fill text-2xl">auto_awesome</span>
+</div>
+<div>
+<h3 class="text-white font-bold leading-none">AI Financial Assistant</h3>
+<div class="flex items-center gap-1.5 mt-1">
+<span class="size-2 rounded-full bg-emerald-500"></span>
+<span class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Ready to assist</span>
+</div>
+</div>
+</div>
+<button class="size-8 rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors">
+<span class="material-symbols-outlined text-slate-400">close</span>
+</button>
+</div>
+<!-- Chat History -->
+<div class="flex-1 overflow-y-auto p-4 space-y-6">
+<!-- AI Message -->
+<div class="flex flex-col gap-2 max-w-[85%]">
+<div class="p-3 rounded-2xl rounded-tl-none bg-slate-800/80 border border-slate-700 text-sm text-slate-200 leading-relaxed">
+                    Hello! I've analyzed your portfolio updates from this morning. Your ROI is currently outperforming your target by 2.4%. Would you like to see the top performing sectors?
+                </div>
+<span class="text-[10px] text-slate-500 ml-1">9:41 AM</span>
+</div>
+<!-- User Message -->
+<div class="flex flex-col gap-2 items-end ml-auto max-w-[85%]">
+<div class="p-3 rounded-2xl rounded-tr-none bg-primary text-sm text-white leading-relaxed shadow-lg">
+                    Yes, please. Also check if there's any unusual activity in my tech stocks.
+                </div>
+<span class="text-[10px] text-slate-500 mr-1">9:42 AM</span>
+</div>
+<!-- AI Message with Insight Card -->
+<div class="flex flex-col gap-2 max-w-[85%]">
+<div class="p-3 rounded-2xl rounded-tl-none bg-slate-800/80 border border-slate-700 text-sm text-slate-200 space-y-3">
+<p>I found a significant upward trend in your Tech holdings (MSFT, AAPL). Here's a quick breakdown:</p>
+<div class="bg-navy-deep/50 rounded-lg p-3 border border-primary/20 space-y-2">
+<div class="flex justify-between items-center text-xs">
+<span class="text-slate-400">Tech Sector Performance</span>
+<span class="text-emerald-500 font-bold">+4.1% Today</span>
+</div>
+<div class="w-full bg-slate-700 h-1 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[75%]"></div>
+</div>
+</div>
+<p>No unusual activity detected, just strong market momentum. All stop-loss orders remain in place.</p>
+</div>
+<span class="text-[10px] text-slate-500 ml-1">9:42 AM</span>
+</div>
+<!-- Typing Indicator -->
+<div class="flex items-center gap-1.5 p-1 ml-1">
+<div class="size-1.5 rounded-full bg-primary/40"></div>
+<div class="size-1.5 rounded-full bg-primary/40"></div>
+<div class="size-1.5 rounded-full bg-primary/40"></div>
+</div>
+</div>
+<!-- Input Area -->
+<div class="p-4 bg-navy-deep border-t border-primary/10">
+<div class="relative flex items-center">
+<input class="w-full bg-slate-800/50 border border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary rounded-xl pl-4 pr-12 py-3 text-sm placeholder:text-slate-500 transition-all" placeholder="Ask about your finances..." type="text"/>
+<button class="absolute right-2 size-8 rounded-lg bg-primary text-white flex items-center justify-center hover:bg-primary/90 transition-colors shadow-lg">
+<span class="material-symbols-outlined text-xl">send</span>
+</button>
+</div>
+<div class="flex gap-2 mt-3 overflow-x-auto pb-1 no-scrollbar">
+<button class="whitespace-nowrap px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-[11px] font-medium text-primary hover:bg-primary/20 transition-colors">
+                    Analyze budget
+                </button>
+<button class="whitespace-nowrap px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-[11px] font-medium text-primary hover:bg-primary/20 transition-colors">
+                    Risk report
+                </button>
+<button class="whitespace-nowrap px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-[11px] font-medium text-primary hover:bg-primary/20 transition-colors">
+                    Tax forecast
+                </button>
+</div>
+</div>
+</div>
+<!-- Floating Action Button (FAB) -->
+<button class="fixed bottom-6 right-6 size-14 rounded-full bg-primary text-white shadow-[0_0_20px_rgba(43,141,238,0.5)] hover:scale-105 active:scale-95 transition-all flex items-center justify-center z-[60]">
+<span class="material-symbols-outlined text-3xl font-fill">auto_awesome</span>
+</button>
+<style>
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</body></html>
