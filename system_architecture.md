@@ -66,8 +66,14 @@ src/
 ├── api/
 │   └── gateway.ts           # GatewayClient — HTTP client gọi Tool Gateway
 ├── components/
-│   ├── Layout.tsx            # AppLayout (sidebar + main content)
+│   ├── Layout.tsx            # AppLayout (sidebar + main content + ChatFAB/ChatPanel)
 │   ├── accounts/             # AccountList, AccountForm
+│   ├── ai-chat/              # ★ AI Chat Panel overlay
+│   │   ├── ChatFAB.tsx       #   Floating action button (Sparkles icon)
+│   │   ├── ChatPanel.tsx     #   Chat panel overlay (message list, input, controls)
+│   │   ├── ChatMessage.tsx   #   Individual message bubble (user/assistant/system)
+│   │   ├── ConfirmationCard.tsx # Tier 2 confirmation card (approve/reject)
+│   │   └── WaitingIndicator.tsx # Animated waiting dots
 │   ├── auth/                 # AuthLock (password lock screen)
 │   ├── budget/               # Budget components
 │   ├── common/               # Toast, UndoProvider, DateProvider, MonthPicker, ConfirmDialog
@@ -94,6 +100,8 @@ src/
 │   └── SettingsPage.tsx      # Cài đặt
 ├── services/
 │   ├── ToolExecutionService.ts  # ★ Core: Gateway-only tool dispatcher
+│   ├── AIChatService.ts         # ★ AI Gateway HTTP client (/ai-api → AI Gateway)
+│   ├── AIChatStore.ts           # ★ Chat state management (useSyncExternalStore)
 │   ├── AccountService.ts        # Proxy → ToolExecutionService
 │   ├── TransactionService.ts    # Proxy → ToolExecutionService
 │   ├── CategoryService.ts       # Proxy → ToolExecutionService
@@ -107,6 +115,8 @@ src/
 │   ├── PayeeService.ts          # Proxy → ToolExecutionService
 │   ├── BackupService.ts         # Backup/restore logic
 │   └── ImportExportService.ts   # Import/export JSON
+├── types/
+│   └── aiChat.ts                # TypeScript types (ChatEntity, AIChatState, API types)
 └── utils/
     └── ...
 ```
@@ -129,6 +139,7 @@ flowchart TD
   - `mm2_gateway_url`: URL của gateway (default `http://localhost:3200`)
   - `mm2_gateway_token`: JWT token (có fallback token mặc định cho dev)
 - Token hết hạn sẽ tự động bị xóa khỏi localStorage, fallback về token mặc định
+- **Vite Proxy**: Client gọi AI Gateway qua path `/ai-api/*`, Vite dev server proxy sang `http://localhost:3300/ai/*` (xem `vite.config.ts`)
 
 > [!IMPORTANT]
 > Local mode (in-browser SQLite) đã bị loại bỏ hoàn toàn kể từ commit `52fefc7` (2026-02-28). Thư mục `src/db/` và `src/services/local/` là legacy code, không còn được import hay sử dụng.
@@ -239,10 +250,9 @@ flowchart LR
 
 #### Approval Guard ([approval.ts](file:///d:/Projects/mm2/tool-gateway/src/middleware/approval.ts))
 - Dùng cho endpoints **Tier 2** (destructive operations)
-- Hỗ trợ 2 chế độ:
-  - **Simple mode**: Header `X-MM-Approval: approved` (dùng khi MCP server đã xác nhận)
-  - **Token mode**: Header `X-MM-Approval-Token: <JWT>` chứa claims `{sub, act, rid, exp, nonce}`
-  - Verify: user match + action match + token validity
+- **Pass-through**: Kể từ bản cập nhật 2026-03-03, approval guard luôn gọi `next()` — không còn chặn request
+- Xác nhận thao tác nhạy cảm được xử lý **qua chat**: AI hỏi user "Bạn có chắc chắn?" trước khi gọi tool
+- Audit logging vẫn hoạt động bình thường cho mọi Tier 2 action
 
 ### 3.4 API Endpoints
 
@@ -441,8 +451,10 @@ sequenceDiagram
 
 #### Orchestrator ([orchestrator.ts](file:///d:/Projects/mm2/ai-gateway/src/orchestrator.ts))
 - **Vòng lặp chính**: System prompt → User message → LLM → Tool calls → MCP execute → LLM → ... → Final text
+- **Conversational Tier 2 confirmation**: System prompt yêu cầu AI phải hỏi xác nhận trước khi gọi destructive tools. AI tự quản lý luồng xác nhận qua chat (không còn dùng approval tokens để chặn tool calls)
+- **History sanitization**: `sanitizeHistory()` sửa các lượt tool call bị gián đoạn (missing tool responses) trong message history
 - **Budget enforcement**: max `MAX_TOOL_CALLS_PER_TURN` (8) tool calls, max `MAX_TURN_WALL_TIME_MS` (25s) wall time
-- **State management**: Session states: `IDLE` → `TOOL_CALLING` → `PENDING_APPROVAL` / `DONE`
+- **State management**: Session states: `IDLE` → `TOOL_CALLING` → `DONE`
 
 #### MCP Client ([mcpClient.ts](file:///d:/Projects/mm2/ai-gateway/src/mcpClient.ts))
 - HTTP JSON-RPC trực tiếp đến MCP Server (`POST /mcp`)
@@ -456,6 +468,7 @@ sequenceDiagram
 - Retry logic với exponential backoff
 
 #### Approval Manager ([approvalManager.ts](file:///d:/Projects/mm2/ai-gateway/src/approvalManager.ts))
+- Vẫn tồn tại cho tương thích ngược (endpoint `/ai/approve` vẫn hoạt động)
 - Tạo opaque approval token (SHA-256 hash của tool name + args)
 - TTL enforcement (default 5 phút)
 - Single-use: token bị xóa sau khi validate thành công
@@ -465,8 +478,9 @@ sequenceDiagram
 | Method | Endpoint | Mô tả |
 |--------|----------|-------|
 | POST | `/ai/chat` | Chat: gửi tin nhắn, nhận phản hồi AI (có thể kèm tool calls) |
-| POST | `/ai/approve` | Xác nhận thao tác Tier 2 bằng approval token |
+| POST | `/ai/approve` | Xác nhận thao tác Tier 2 bằng approval token (legacy, vẫn hoạt động) |
 | GET | `/ai/session/:id` | Debug: xem trạng thái session |
+| DELETE | `/ai/session/:id` | Xóa session / xóa lịch sử chat |
 | GET | `/healthz` | Health check (kèm trạng thái MCP connection) |
 | GET | `/version` | Version info |
 
@@ -475,7 +489,8 @@ sequenceDiagram
 - JSON file persistence (`data/sessions.json`)
 - TTL: 7 ngày (configurable)
 - Conversation trimming: giữ tối đa 40 messages gần nhất
-- States: `IDLE`, `TOOL_CALLING`, `PENDING_APPROVAL`, `DONE`
+- States: `IDLE`, `TOOL_CALLING`, `DONE`
+- Client-side persistence: `AIChatStore` lưu state vào `localStorage` (key `ai-chat-state`)
 
 ### 4.7 Security
 
@@ -772,33 +787,39 @@ sequenceDiagram
     MCP-->>AI: MCP response {content: [...]}
 ```
 
-### 6.3 Luồng xử lý Tier 2
+### 6.3 Luồng xử lý Tier 2 (Conversational Confirmation)
+
+Kể từ bản cập nhật 2026-03-03, xác nhận Tier 2 được xử lý **qua chat** thay vì token-based approval:
 
 ```mermaid
 sequenceDiagram
-    participant Caller as Client / AI
+    participant User as User (Chat Panel)
+    participant AG as AI Gateway
+    participant LLM as LLM
+    participant MCP as MCP Server
     participant GW as Tool Gateway
 
-    Caller->>GW: DELETE /api/v1/delete_account
-    GW->>GW: approvalGuard("delete_account")
-    alt Simple Mode
-        Note right of Caller: X-MM-Approval: approved
-        GW->>GW: Pass ✓
-    else Token Mode
-        Note right of Caller: X-MM-Approval-Token: <JWT>
-        GW->>GW: Verify JWT claims (sub, act, rid)
-        alt Valid
-            GW->>GW: Pass ✓
-        else Invalid
-            GW-->>Caller: 403 FORBIDDEN
-        end
-    else No approval header
-        GW-->>Caller: 403 APPROVAL_REQUIRED
-    end
+    User->>AG: "Xóa tài khoản VCB"
+    AG->>LLM: Chat Completions
+    LLM-->>AG: Text: "Bạn có chắc chắn muốn xóa tài khoản VCB?"
+    AG-->>User: "Bạn có chắc chắn?"
+    User->>AG: "Có, xóa đi"
+    AG->>LLM: Chat Completions (user confirmed)
+    LLM-->>AG: tool_call: delete_account({id: "..."}) 
+    AG->>MCP: tools/call delete_account
+    MCP->>GW: DELETE /api/v1/delete_account
+    GW->>GW: approvalGuard() → pass-through
     GW->>GW: auditLog middleware
     GW->>GW: Execute delete
-    GW-->>Caller: 200 OK
+    GW-->>MCP: 200 OK
+    MCP-->>AG: MCP response
+    AG->>LLM: Tool result
+    LLM-->>AG: "Đã xóa tài khoản VCB"
+    AG-->>User: "Đã xóa tài khoản VCB"
 ```
+
+> [!NOTE]
+> `approvalGuard()` trên Tool Gateway giờ là pass-through (luôn gọi `next()`). Xác nhận được đảm bảo bởi system prompt yêu cầu AI phải hỏi user trước khi gọi destructive tools.
 
 ---
 
@@ -862,6 +883,15 @@ sequenceDiagram
 
 ### 9.1 Development
 
+**Cách nhanh (Windows):** Chạy `start.bat` ở thư mục gốc — tự động mở 4 terminal:
+
+```bash
+cd d:\Projects\mm2
+start.bat
+```
+
+**Hoặc mở thủ công:**
+
 ```bash
 # Terminal 1: Client (Vite dev server)
 cd d:\Projects\mm2
@@ -921,9 +951,10 @@ cd ai-gateway && npm run build && npm start
 | **Giao tiếp** | Client ↔ Gateway: REST/JSON; Client ↔ AI Gateway: REST/JSON; AI Gateway ↔ MCP: JSON-RPC; AI Gateway ↔ LLM: OpenAI API |
 | **Auth** | Client → Gateway: JWT; AI Gateway → MCP: Bearer Token; AI Gateway → LLM: API Key |
 | **Database** | SQLite (sql.js trên server), 12 bảng, file-based persistence. Client không chứa DB |
-| **Security** | 3-tier system (Read / Write / Destructive), audit logging, approval guards, origin guard |
+| **Security** | 3-tier system (Read / Write / Destructive), audit logging, conversational confirmation (Tier 2), origin guard |
 | **Client Mode** | Gateway-only (thin client). Local mode đã loại bỏ hoàn toàn (2026-02-28) |
 | **MCP** | Manifest-driven tool registration, 69 tools, auto schema generation, multi-session support |
-| **AI Gateway** | MCP-First orchestrator, OpenAI-compatible LLM, session persistence, Tier 2 approval flow |
+| **AI Gateway** | MCP-First orchestrator, OpenAI-compatible LLM, session persistence, conversational Tier 2 confirmation |
+| **AI Chat UI** | Chat Panel overlay (FAB → panel), `AIChatService` + `AIChatStore`, Vite proxy `/ai-api` → `:3300/ai` |
 | **Soft Delete** | Transactions sử dụng `deleted_at` thay vì xóa thật |
 | **Idempotency** | Hỗ trợ `idempotency_keys` table cho API calls |

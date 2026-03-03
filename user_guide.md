@@ -17,6 +17,17 @@ Money Manager 2 (MM2) là ứng dụng quản lý tài chính cá nhân giúp b�
 
 ## Khởi chạy hệ thống
 
+### Cách 1: Một lệnh duy nhất (Windows)
+
+Chạy file `start.bat` ở thư mục gốc — tự động mở 4 cửa sổ terminal cho tất cả services:
+
+```bash
+cd d:\Projects\mm2
+start.bat
+```
+
+### Cách 2: Mở thủ công
+
 Mở 4 cửa sổ terminal và chạy lần lượt:
 
 ```bash
@@ -152,11 +163,17 @@ Xem lịch sử mọi thao tác thay đổi dữ liệu:
 
 ---
 
-## Trợ lý AI
+## Trợ lý AI (Chat Panel)
 
-### Cách hoạt động
+### Mở Chat Panel
 
-Trợ lý AI cho phép bạn tương tác với Money Manager bằng ngôn ngữ tự nhiên thay vì click UI:
+Nhấn nút **✦** (Sparkles) ở góc dưới phải màn hình để mở panel chat AI. Panel hiển thị dưới dạng overlay, bạn có thể chat trong khi vẫn thấy ứng dụng phía sau.
+
+- **Gửi tin nhắn**: Gõ câu hỏi hoặc yêu cầu vào ô chat → nhấn Enter hoặc nút gửi
+- **Xóa lịch sử**: Nhấn biểu tượng 🗑️ để xóa toàn bộ cuộc trò chuyện
+- **Đóng panel**: Nhấn nút ✕ hoặc phím Escape
+
+### Những gì AI có thể làm
 
 ```
 Bạn: "Tháng 2 tôi chi bao nhiêu cho ăn uống?"
@@ -166,8 +183,6 @@ AI:  "Tháng 2/2026, bạn chi 3.250.000đ cho danh mục Ăn uống, gồm:
       - Ăn tối: 700.000đ (7 giao dịch)"
 ```
 
-### Những gì AI có thể làm
-
 | Nhóm | Ví dụ câu lệnh |
 |------|----------------|
 | **Xem thông tin** | *"Tổng số dư các tài khoản"*, *"Ngân sách tháng này còn bao nhiêu?"* |
@@ -175,15 +190,15 @@ AI:  "Tháng 2/2026, bạn chi 3.250.000đ cho danh mục Ăn uống, gồm:
 | **Phân tích** | *"So sánh chi tiêu tháng 1 và tháng 2"*, *"Danh mục nào tăng nhiều nhất?"* |
 | **Quản lý** | *"Tạo quy tắc lương 15 triệu hàng tháng"*, *"Xem lịch trả góp iPhone"* |
 
-### Thao tác nhạy cảm
+### Thao tác nhạy cảm (Xác nhận qua chat)
 
-Khi AI muốn thực hiện thao tác xóa hoặc import dữ liệu (Tier 2), hệ thống sẽ:
-1. **Dừng lại** và hiển thị preview thao tác
-2. **Yêu cầu xác nhận** từ bạn trước khi thực hiện
-3. Token xác nhận có hiệu lực **5 phút** và chỉ dùng được **1 lần**
+Khi AI muốn thực hiện thao tác xóa hoặc import dữ liệu (Tier 2), AI sẽ:
+1. **Mô tả** thao tác sắp thực hiện ngay trong chat
+2. **Hỏi xác nhận**: *"Bạn có chắc chắn muốn xóa tài khoản X?"*
+3. Bạn **trả lời** "có" / "ok" / "đồng ý" → AI thực hiện, hoặc "không" / "hủy" → AI bỏ qua
 
 > [!CAUTION]
-> AI không bao giờ tự ý xóa dữ liệu. Mọi thao tác phá hủy đều cần sự đồng ý rõ ràng của bạn.
+> AI không bao giờ tự ý xóa dữ liệu. Mọi thao tác phá hủy đều cần sự đồng ý rõ ràng của bạn qua chat.
 
 ### Cấu hình LLM
 
