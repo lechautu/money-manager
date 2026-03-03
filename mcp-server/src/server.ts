@@ -30,21 +30,46 @@ function createMcpServerInstance(): McpServer {
                 const required = tool.inputSchema.required?.includes(key);
                 let zodType: z.ZodTypeAny;
 
-                switch (prop.type) {
-                    case 'number':
-                    case 'integer':
-                        zodType = z.number();
-                        break;
-                    case 'boolean':
-                        zodType = z.boolean();
-                        break;
-                    case 'array':
-                        zodType = z.array(z.any());
-                        break;
-                    default:
-                        zodType = z.string();
-                }
+                const createZodType = (p: any): z.ZodTypeAny => {
+                    if (p.enum) {
+                        if (p.type === 'string') {
+                            return z.enum(p.enum as [string, ...string[]]);
+                        }
+                        // For numbers, we can use z.union or z.literal
+                        const literals = p.enum.map((v: any) => z.literal(v));
+                        if (literals.length === 1) return literals[0];
+                        return z.union([literals[0], literals[1], ...literals.slice(2)]);
+                    }
 
+                    switch (p.type) {
+                        case 'number':
+                        case 'integer':
+                            return z.number();
+                        case 'boolean':
+                            return z.boolean();
+                        case 'array':
+                            if (p.items) {
+                                return z.array(createZodType(p.items));
+                            }
+                            return z.array(z.any());
+                        case 'object':
+                            if (p.properties) {
+                                const subShape: Record<string, any> = {};
+                                for (const [k, v] of Object.entries(p.properties)) {
+                                    const isReq = p.required?.includes(k);
+                                    let zType = createZodType(v);
+                                    subShape[k] = isReq ? zType : zType.optional();
+                                }
+                                return z.object(subShape);
+                            }
+                            return z.record(z.any());
+                        case 'string':
+                        default:
+                            return z.string();
+                    }
+                };
+
+                zodType = createZodType(prop);
                 shape[key] = required ? zodType : zodType.optional();
             }
         }
@@ -59,10 +84,15 @@ function createMcpServerInstance(): McpServer {
 
                 try {
                     const tier = tool.tier;
-                    const result = await executeToolViaGateway(tool.name, args as Record<string, any>, {
+                    // Extract _approval from args (injected by AI gateway for auto-approve)
+                    const toolArgs = { ...(args as Record<string, any>) };
+                    const approvalHeader = toolArgs._approval as string | undefined;
+                    delete toolArgs._approval;
+
+                    const result = await executeToolViaGateway(tool.name, toolArgs, {
                         userId: 'mcp-user',
                         requestId,
-                        approvalHeader: tier === 2 ? undefined : undefined,
+                        approvalHeader,
                     });
 
                     const latencyMs = Date.now() - startTime;

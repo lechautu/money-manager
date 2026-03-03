@@ -15,6 +15,13 @@ export default defineConfig({
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'require-corp',
     },
+    proxy: {
+      '/ai-api': {
+        target: 'http://localhost:3300',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/ai-api/, '/ai'),
+      },
+    },
   },
   optimizeDeps: {
     exclude: ['wa-sqlite'],

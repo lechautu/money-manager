@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { log } from './logger.js';
-import { createSession, getSession, updateSession, type Session } from './sessionStore.js';
+import { createSession, getSession, updateSession, deleteSession, type Session } from './sessionStore.js';
 import { runOrchestrator } from './orchestrator.js';
 import { validateApprovalToken } from './approvalManager.js';
 import { callTool } from './mcpClient.js';
@@ -30,12 +30,12 @@ aiRoutes.post('/chat', async (req, res) => {
         let userMessage = message;
         if (resume?.type === 'options' && resume.selectedOptionIds && session.pendingOptions) {
             const selected = session.pendingOptions.options.filter((o: any) => resume.selectedOptionIds.includes(o.id));
-            userMessage = `Tôi chọn: ${selected.map((o: any) => o.label).join(', ')}`;
+            userMessage = `I select: ${selected.map((o: any) => o.label).join(', ')}`;
             updateSession(session.id, { pendingOptions: null, state: 'RESUMED' });
         }
 
         const result = await runOrchestrator(session, userMessage, {
-            locale: locale || 'vi-VN',
+            locale: locale || 'en-US',
             timezone: timezone || 'Asia/Ho_Chi_Minh',
             currency: clientContext?.currency || 'VND',
         }, { traceId });
@@ -68,7 +68,7 @@ aiRoutes.post('/approve', async (req, res) => {
         if (decision === 'reject') {
             session.pendingApproval!.used = true;
             updateSession(sessionId, { state: 'DONE', pendingApproval: null });
-            res.json({ sessionId, assistantMessage: 'Đã hủy thao tác.', ui: {}, requiresApproval: false, actions: [], trace: { traceId, toolCalls: [], totalLatencyMs: 0 } });
+            res.json({ sessionId, assistantMessage: 'Action cancelled.', ui: {}, requiresApproval: false, actions: [], trace: { traceId, toolCalls: [], totalLatencyMs: 0 } });
             return;
         }
 
@@ -80,12 +80,12 @@ aiRoutes.post('/approve', async (req, res) => {
         updateSession(sessionId, { state: 'DONE', pendingApproval: null });
 
         // Add tool result to messages, let LLM summarize
-        session.messages.push({ role: 'tool', content: JSON.stringify(toolResult.ok ? toolResult.data : toolResult.error), toolCallId: `approved_${pending.toolName}` });
+        session.messages.push({ role: 'tool', content: JSON.stringify(toolResult.ok ? toolResult.data : toolResult.error), toolCallId: pending.toolCallId });
         const result = await runOrchestrator(session, null, {}, { traceId });
 
         res.json({
             sessionId,
-            assistantMessage: result.assistantMessage || (toolResult.ok ? 'Thao tác thành công.' : `Lỗi: ${toolResult.error?.message}`),
+            assistantMessage: result.assistantMessage || (toolResult.ok ? 'Action successful.' : `Error: ${toolResult.error?.message}`),
             ui: result.ui,
             requiresApproval: false,
             actions: [{ toolName: pending.toolName, success: toolResult.ok, data: toolResult.data, error: toolResult.error }, ...result.actions],
@@ -102,4 +102,11 @@ aiRoutes.get('/session/:id', (req, res) => {
     const s = getSession(req.params.id);
     if (!s) { res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Session not found' } }); return; }
     res.json({ id: s.id, state: s.state, messageCount: s.messages.length, hasPendingApproval: !!s.pendingApproval, createdAt: new Date(s.createdAt).toISOString() });
+});
+
+// --- DELETE /session/:id ---
+aiRoutes.delete('/session/:id', (req, res) => {
+    const deleted = deleteSession(req.params.id);
+    if (!deleted) { res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Session not found' } }); return; }
+    res.json({ status: 'ok', id: req.params.id });
 });

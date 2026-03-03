@@ -150,7 +150,13 @@ export async function callTool(
     try {
         log('info', `MCP tool call: ${toolName}`, { tool_name: toolName, trace_id: headers?.traceId });
 
-        const result = await mcpRequest('tools/call', { name: toolName, arguments: args });
+        // Inject approval into arguments so MCP server can forward it to tool gateway
+        const callArgs = { ...args };
+        if (headers?.approval) {
+            callArgs._approval = headers.approval;
+        }
+
+        const result = await mcpRequest('tools/call', { name: toolName, arguments: callArgs });
         const latencyMs = Date.now() - startTime;
         log('info', `MCP tool done: ${toolName}`, { tool_name: toolName, latency_ms: latencyMs, trace_id: headers?.traceId });
 

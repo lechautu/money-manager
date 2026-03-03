@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import {
     LayoutDashboard,
@@ -18,7 +18,8 @@ import { twMerge } from 'tailwind-merge';
 import { ToolDebugPanel } from './ui/ToolDebugPanel';
 import { RecurringService } from '../services/RecurringService';
 import { InstallmentService } from '../services/InstallmentService';
-import { useEffect } from 'react';
+import { ChatFAB } from './ai-chat/ChatFAB';
+import { ChatPanel } from './ai-chat/ChatPanel';
 
 const NAV_ITEMS = [
     { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -58,6 +59,7 @@ function NavItem({ to, icon: Icon, label, className, badgeCount }: { to: string;
 
 export function AppLayout() {
     const [isFormOpen, setIsFormOpen] = useState(false);
+    const [isChatOpen, setIsChatOpen] = useState(false);
     const [installmentCount, setInstallmentCount] = useState(0);
     const [recurringCount, setRecurringCount] = useState(0);
 
@@ -100,6 +102,18 @@ export function AppLayout() {
             window.removeEventListener('refresh-recurring-count', handleRefresh);
         };
     }, []);
+
+    // Toggle body class when chat is open to hide other FABs
+    useEffect(() => {
+        if (isChatOpen) {
+            document.body.classList.add('ai-chat-open');
+        } else {
+            document.body.classList.remove('ai-chat-open');
+        }
+        return () => document.body.classList.remove('ai-chat-open');
+    }, [isChatOpen]);
+
+    const handleChatClose = useCallback(() => setIsChatOpen(false), []);
 
     return (
         <div className="flex h-screen w-full flex-col md:flex-row bg-gray-950 text-gray-100">
@@ -145,7 +159,7 @@ export function AppLayout() {
                 ))}
             </nav>
 
-            {/* Global Floating Action Button */}
+            {/* Global Floating Action Button — Add Transaction */}
             <button
                 onClick={() => setIsFormOpen(true)}
                 className="fixed bottom-20 right-6 md:bottom-8 md:right-8 w-14 h-14 bg-blue-600 rounded-full shadow-2xl flex items-center justify-center text-white hover:bg-blue-700 transition-all z-[100] active:scale-95 group global-fab"
@@ -153,6 +167,13 @@ export function AppLayout() {
             >
                 <Plus size={28} className="group-hover:rotate-90 transition-transform duration-300" />
             </button>
+
+            {/* AI Chat FAB */}
+            {/* AI Chat FAB */}
+            {!isChatOpen && <ChatFAB onClick={() => setIsChatOpen(true)} />}
+
+            {/* AI Chat Panel Overlay */}
+            {isChatOpen && <ChatPanel onClose={handleChatClose} />}
 
             <TransactionForm
                 isOpen={isFormOpen}

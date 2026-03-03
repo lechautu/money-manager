@@ -41,33 +41,13 @@ export function identityMiddleware(req: Request, res: Response, next: NextFuncti
 
 /**
  * Tool-level approval guard for Tier 2 tools.
- * Returns null if allowed, or an error object if blocked.
+ * Approval is now handled via AI chat confirmation — always returns null (allowed).
  */
 export function checkApprovalGuard(
-    toolName: string,
-    tier: number,
-    headers: Record<string, string | string[] | undefined>
+    _toolName: string,
+    _tier: number,
+    _headers: Record<string, string | string[] | undefined>
 ): { code: string; message: string } | null {
-    if (!REQUIRE_APPROVAL_GUARD) return null;
-
-    // Check denylist — always require approval for these tools
-    const isDenylisted = APPROVAL_GUARD_DENYLIST.includes(toolName);
-
-    // Check allowlist — skip approval for these tools
-    const isAllowlisted = APPROVAL_GUARD_ALLOWLIST.length > 0 && APPROVAL_GUARD_ALLOWLIST.includes(toolName);
-
-    const needsApproval = tier === 2 || isDenylisted;
-
-    if (needsApproval && !isAllowlisted) {
-        const approvalHeader = headers['x-mm-approval'];
-        if (approvalHeader !== 'approved') {
-            log('warn', `Tier 2 tool blocked: ${toolName} — missing approval header`, { tool_name: toolName, tier });
-            return {
-                code: 'APPROVAL_REQUIRED',
-                message: `Tool '${toolName}' is Tier 2 (destructive/sensitive). Execution requires explicit approval. Send header 'x-mm-approval: approved' to proceed.`,
-            };
-        }
-    }
-
+    // AI chat confirmation replaces header-based approval.
     return null;
 }

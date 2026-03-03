@@ -15,3 +15,28 @@ body {
 .modal-open .global-fab {
   display: none;
 }
+
+/* AI Chat Panel: hide all FABs when open */
+.ai-chat-open .global-fab,
+.ai-chat-open .ai-chat-fab {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+/* Slide-in animation for chat panel */
+@keyframes slide-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.animate-slide-in-right {
+  animation: slide-in-right 0.25s ease-out;
+}
+
+/* Typing indicator dots animation */
+@keyframes ai-dot-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-6px); opacity: 1; }
+}
+.ai-dot {
+  animation: ai-dot-bounce 1.4s ease-in-out infinite;
+}

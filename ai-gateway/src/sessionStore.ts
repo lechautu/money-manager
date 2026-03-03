@@ -15,6 +15,7 @@ export interface ChatMessage {
 
 export interface PendingApproval {
     approvalToken: string;
+    toolCallId: string;
     toolName: string;
     toolArgs: Record<string, any>;
     argsHash: string;
@@ -100,6 +101,12 @@ export function updateSession(id: string, patch: Partial<Session>) {
     if (!s) return;
     Object.assign(s, patch, { updatedAt: Date.now() });
     scheduleSave();
+}
+
+export function deleteSession(id: string): boolean {
+    const deleted = sessions.delete(id);
+    if (deleted) scheduleSave();
+    return deleted;
 }
 
 export function trimMessages(messages: ChatMessage[], max = 40): ChatMessage[] {

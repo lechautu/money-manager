@@ -1,6 +1,6 @@
 import { GatewayClient } from '../api/gateway';
 import type { GatewayConfig } from '../api/gateway';
-import toolsManifest from '../../instruct/05-AI-Tools/tools_manifest_v1.json';
+import toolsManifest from '../../mcp-server/tools_manifest_v1.json';
 
 export interface ToolExecutionOptions {
     remoteConfig?: GatewayConfig;

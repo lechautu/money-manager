@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import toolsManifest from '../../../instruct/05-AI-Tools/tools_manifest_v1.json';
+import toolsManifest from '../../../mcp-server/tools_manifest_v1.json';
 import { ToolExecutionService } from '../../services/ToolExecutionService';
 
 export const ToolDebugPanel: React.FC = () => {

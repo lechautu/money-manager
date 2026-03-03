@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:all": "npx concurrently \"npm run dev\" \"cd tool-gateway && npm run dev\" \"cd mcp-server && npm run dev\" \"cd ai-gateway && npm run dev\"",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
