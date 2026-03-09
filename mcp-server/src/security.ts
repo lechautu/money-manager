@@ -4,9 +4,6 @@ import type { RegisteredTool } from './toolRegistry.js';
 import { getTierForTool } from './toolRegistry.js';
 
 const MCP_BEARER = process.env.MCP_BEARER || '';
-const REQUIRE_APPROVAL_GUARD = (process.env.REQUIRE_APPROVAL_GUARD ?? 'true') === 'true';
-const APPROVAL_GUARD_DENYLIST = (process.env.APPROVAL_GUARD_DENYLIST || '').split(',').filter(Boolean);
-const APPROVAL_GUARD_ALLOWLIST = (process.env.APPROVAL_GUARD_ALLOWLIST || '').split(',').filter(Boolean);
 
 /**
  * Express middleware: validates Authorization: Bearer <MCP_BEARER>
